@@ -1,44 +1,59 @@
-import { Alert, Container } from 'react-bootstrap'
+import { Alert, Button, Container } from 'react-bootstrap'
 import MeasurementStage from './components/MeasurementStage.jsx'
+import InfoPanel from './components/InfoPanel.jsx'
 import { useFaceMeasurement } from './hooks/useFaceMeasurement.js'
 import './App.css'
 
 function App() {
   const {
     videoRef,
-    canvasRef,
     stageRef,
-    status,
     isRunning,
     isInitializing,
     error,
+    measurements,
+    overlay,
     startCamera,
     stopCamera,
   } = useFaceMeasurement()
 
   return (
     <Container fluid className="app-shell">
-      <div className="content-wrap">
-        <h1 className="app-title">headSize</h1>
-        <MeasurementStage
-          status={status}
-          isRunning={isRunning}
-          isInitializing={isInitializing}
-          onStart={startCamera}
-          onStop={() => stopCamera()}
-          videoRef={videoRef}
-          canvasRef={canvasRef}
-          stageRef={stageRef}
-        />
-        {error ? (
-          <Alert variant="warning" className="error-alert">
-            {error}
-          </Alert>
-        ) : null}
-        <p className="note">
-          Tip: If nothing appears, ensure camera permissions are granted. Everything runs locally in
-          your browser.
-        </p>
+      <div className="page">
+
+
+        <section className="stage-section">
+          <MeasurementStage
+            isRunning={isRunning}
+            isInitializing={isInitializing}
+            onStart={startCamera}
+            onStop={() => stopCamera()}
+            videoRef={videoRef}
+            stageRef={stageRef}
+            measurements={measurements}
+            overlay={overlay}
+          />
+          {error ? (
+            <Alert variant="warning" className="inline-alert">
+              {error}
+            </Alert>
+          ) : null}
+        </section>
+
+        <h2 className="brand">faceSize</h2>
+            <p className="tagline">
+              Real-time facial measurements using MediaPipe Tasks Vision. Mirror the camera feed, see
+              the overlays, and capture consistent head-fit data.
+            </p>
+        <InfoPanel />
+
+
+        <section className="footnote">
+          <p className="note">
+            Tip: grant camera permissions if you do not see a feed. All processing happens locally in
+            your browser; nothing is uploaded.
+          </p>
+        </section>
       </div>
     </Container>
   )

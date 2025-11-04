@@ -87,15 +87,14 @@
   height: 100%;
 }
 
-.video-layer,
-.overlay-canvas {
+.video-layer {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   transform: scaleX(-1);
   border-radius: inherit;
-  z-index: 2;
+  z-index: 1;
   pointer-events: none !important;
 }
 
@@ -106,6 +105,126 @@
 .stage-overlay {
   position: absolute;
   inset: 0;
+  z-index: 2;
+}
+
+.hud-wrapper {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.hud-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: 'Roboto Mono', 'Fira Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  color: #f5f7ff;
+  text-shadow: 0 0 14px rgba(0, 0, 0, 0.75);
+}
+
+.hud-pd-line {
+  position: absolute;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.85);
+  transform: translateY(-50%);
+  border-radius: 4px;
+}
+
+.hud-pd-label {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translate(-50%, -100%);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hud-eye-circle {
+  position: absolute;
+  border: 2px solid rgba(255, 209, 102, 0.95);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hud-eye-pupil {
+  display: block;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 227, 138, 0.95);
+  background: radial-gradient(circle, rgba(255, 243, 196, 0.75), rgba(255, 209, 102, 0.4));
+  box-shadow: 0 0 12px rgba(255, 209, 102, 0.55);
+}
+
+.hud-eye-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translate(-50%, 10px);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.hud-text-stack {
+  position: absolute;
+  transform: translate(-50%, -20px);
+  display: grid;
+  gap: 4px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.hud-text-stack span {
+  display: block;
+}
+
+.eye-pip {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: min(220px, 28%);
+  aspect-ratio: 4 / 3;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 16px 32px rgba(6, 10, 24, 0.45);
+  border: 1px solid rgba(120, 140, 220, 0.45);
+  backdrop-filter: blur(10px);
+  background: rgba(14, 20, 36, 0.65);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.eye-pip-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: contrast(1.08) saturate(1.1);
+}
+
+.eye-pip-overlay {
+  position: absolute;
+  inset: auto 0 6px 0;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(238, 244, 255, 0.92);
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
+}
+
+.eye-pip-title {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 11px;
+  color: rgba(207, 219, 255, 0.75);
 }
 
 .metrics-panel {

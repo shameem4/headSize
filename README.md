@@ -6,6 +6,8 @@ top of MediaPipe Tasks Vision. The app mirrors your webcam feed, runs the on-dev
 face-landmarker model, and overlays estimated metrics such as interpupillary distance
 (IPD), face breadth, nose arch height, and nose flare angle.
 
+Check it out <https://shameem4.github.io/headSize/>
+
 ## How It Works
 
 - The React shell renders the measurement stage, layering `<video>` and `<canvas>`

@@ -1,55 +1,46 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>headSize</title>
-    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils@0.6/control_utils.css" crossorigin="anonymous">
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils@0.6/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5/holistic.js" crossorigin="anonymous"></script>    
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>headSize — Simple HTML</title>
+    <style>
+      html, body { height: 100%; margin: 0; font-family: system-ui, Arial, sans-serif; background: #071126; color: #e7edf7; }
+      .stage { display: flex; align-items: center; justify-content: center; height: 100%; }
+      canvas { box-shadow: 0 12px 36px rgba(0,0,0,0.6); background: #000; max-width: 100%; height: auto; }
+      .caption { position: fixed; left: 12px; top: 12px; font-size: 14px; opacity: 0.9 }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    
-    <div class="container">
-        <video class="input_video"></video>
-        <div class="canvas-container">
-        <canvas class="output_canvas" width="1280px" height="720px">
-        </canvas>
-        </div>
-        <div class="loading">
-          <div class="spinner"></div>
-          <div class="message">
-            Loading
-          </div>
-        </div>
-        <a class="abs logo" href="http://www.mediapipe.dev" target="_blank">
-          <div style="display: flex;align-items: center;bottom: 0;right: 10px;">
-            <img class="logo" src="./img/logo_white.png" alt="" style="
-              height: 50px;">
-            <span class="title">MediaPipe</span>
-          </div>
-        </a>
-        <div class="shoutout">
-          <div>
-            <a href="https://solutions.mediapipe.dev/holistic" target="_blank">
-              Click here for more info
-            </a>
-          </div>
-        </div>
-      </div>
-      <div class="control-panel">
-    </div>
+    <div class="caption">Simple static page — canvas sized 1280×720 (max-width:100%)</div>
+    <main class="stage">
+      <canvas id="stage" width="1280" height="720" aria-label="Preview canvas"></canvas>
+    </main>
 
-
-    <footer class="repo-link">
-      <a href="https://github.com/shameem4/headSize" target="_blank" rel="noopener noreferrer">
-        View source on GitHub
-      </a>
-    </footer>
-    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Simple demo draw loop so the canvas isn't blank
+      (function(){
+        const canvas = document.getElementById('stage');
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width; const h = canvas.height;
+        function draw(t){
+          ctx.clearRect(0,0,w,h);
+          // background gradient
+          const g = ctx.createLinearGradient(0,0,w,h);
+          g.addColorStop(0,'#0b1830');
+          g.addColorStop(1,'#020412');
+          ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+          // rotating rectangle
+          ctx.save(); ctx.translate(w/2,h/2); ctx.rotate(t/2000);
+          ctx.fillStyle = 'rgba(94,203,255,0.12)'; ctx.fillRect(-240,-135,480,270);
+          ctx.restore();
+          // caption
+          ctx.fillStyle = '#e7edf7'; ctx.font = '20px system-ui, Arial';
+          ctx.fillText('Canvas 1280×720', 20, 36);
+          requestAnimationFrame(draw);
+        }
+        requestAnimationFrame(draw);
+      })();
+    </script>
   </body>
 </html>

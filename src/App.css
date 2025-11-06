@@ -1,5 +1,7 @@
 .app-shell {
   min-height: 100vh;
+  /* include padding in the element's height so min-height doesn't cause overflow */
+  box-sizing: border-box;
   padding: 48px 24px 64px;
   display: flex;
   justify-content: center;
@@ -9,7 +11,8 @@
 }
 
 .page {
-  width: min(1120px, 100%);
+  /* allow page to expand to 1280px so the fixed-stage (1280x720) can fit */
+  width: min(1280px, 100%);
   display: grid;
   gap: 40px;
   color: #f5f7ff;
@@ -142,16 +145,29 @@
   letter-spacing: 0.02em;
 }
 
-.hud-eye-circle {
+.hud-eye-diamond {
   position: absolute;
-  border: 2px solid rgba(255, 209, 102, 0.95);
-  border-radius: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
   box-shadow: 0 0 18px rgba(0, 0, 0, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.hud-eye-diamond svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.hud-eye-diamond polygon {
+  fill: transparent;
+  stroke: rgba(255, 209, 102, 0.95);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }
 
 .hud-eye-pupil {

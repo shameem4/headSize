@@ -2,12 +2,13 @@ export const MODEL_ASSET_PATHS = {
   wasm: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm',
   face:
     'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
-  pose:
-    'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task',
 }
 
 export const REAL_IRIS_DIAMETER_MM = 12
 export const AVERAGE_PUPIL_DIAMETER_MM = 4.0
+
+export const LEFT_EYE_CORNERS  = [33, 133]
+export const RIGHT_EYE_CORNERS = [362, 263]
 
 export const OVERLAY_METADATA = {
   landmarkIndices: {
@@ -101,65 +102,4 @@ export const OVERLAY_METADATA = {
   ],
 }
 
-export const OVERLAY_STYLE = {
-  defaultDepth: -0.1,
-  lineWidth: 4,
-  sphereGeometryArgs: [6, 16, 16],
-  materialOpacity: 0.9,
-  clearColorHex: 0x000000,
-  colors: {
-    ipd: '#ff4d4d',
-    faceBreadth: '#36ff9a',
-    noseArch: '#5ecbff',
-    nose: '#ffa24f',
-    body: '#ffd166',
-  },
-}
 
-export const PROCESSING_CONFIG = {
-  targetFps: 15,
-  fallbackVideoSize: {
-    width: 1280,
-    height: 720,
-  },
-  kalmanNoise: {
-    ipdMM: { processNoise: 0.2, measurementNoise: 50 },
-    faceBreadthMM: { processNoise: 0.5, measurementNoise: 120 },
-    noseArchMM: { processNoise: 0.15, measurementNoise: 40 },
-    flareDeg: { processNoise: 0.3, measurementNoise: 160 },
-    distanceToCameraCM: { processNoise: 0.6, measurementNoise: 400 },
-    eyeHeightLeftMM: { processNoise: 0.35, measurementNoise: 180 },
-    eyeHeightRightMM: { processNoise: 0.35, measurementNoise: 180 },
-    eyeHeightDeltaMM: { processNoise: 0.35, measurementNoise: 200 },
-  },
-  smoothing: {
-    alpha: 0.2,
-    defaultThreshold: 0.15,
-    thresholds: {
-      ipdMM: 0.8,
-      faceBreadthMM: 2.0,
-      noseArchMM: 0.8,
-      flareDeg: 0.8,
-      distanceToCameraCM: 1.4,
-      eyeHeightLeftMM: 0.6,
-      eyeHeightRightMM: 0.6,
-      eyeHeightDeltaMM: 0.5,
-    },
-  },
-}
-
-export const CAMERA_CONFIG = {
-  position: [0, 0, 0],
-  zoom: 1,
-  near: -100,
-  far: 100,
-}
-
-export const DISTANCE_TO_CAMERA = {
-  horizontalFovDegrees: 60,
-  minReliableIpdPx: 8,
-  clampCm: {
-    min: 20,
-    max: 120,
-  },
-}

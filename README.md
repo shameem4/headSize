@@ -13,7 +13,7 @@ Check it out <https://shameem4.github.io/headSize/>
 - The React shell renders the measurement stage, layering `<video>` and `<canvas>`
   in a
   styled Bootstrap card (`src/components/MeasurementStage.jsx`).
-- On load the hook in `src/hooks/useFaceMeasurement.js`:
+- On load the hook in `src/hooks/MediapipeCallback.js`:
   1. Preloads the MediaPipe face-landmarker model through
      `FilesetResolver.forVisionTasks` and `FaceLandmarker.createFromOptions`.
   2. Requests the user camera with `getUserMedia` and streams it into the `<video>`
@@ -61,7 +61,7 @@ appears.
 
 - `src/App.jsx` — Container that wires the hook, stage component, and status UI
 - `src/App.css` — Dark theme and layout styles aligned with the original prototype
-- `src/hooks/useFaceMeasurement.js` — Camera + model lifecycle encapsulated as a
+- `src/hooks/MediapipeCallback.js` — Camera + model lifecycle encapsulated as a
   hook
 - `src/lib/drawFaceMeasurements.js` — MediaPipe landmark calculations and rendering
 - `src/index.css` — Global font, body, and root styling

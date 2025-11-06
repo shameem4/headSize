@@ -28,4 +28,3 @@ npx http-server -c-1 . -p 5173
 
 If you want the original React source restored I can recover it from git; let me
 know and I'll restore or create a backup before further deletions.
-

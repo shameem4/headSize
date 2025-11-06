@@ -1,0 +1,12 @@
+body {
+	overflow-y: scroll;
+	min-height: 200vh; /* Ensures scrollbar is visible even if content is short */
+}
+
+/* Mirror the video for selfie view */
+#webcam {
+  transform: scaleX(-1);
+  -webkit-transform: scaleX(-1);
+  /* Ensure video stays in place */
+  display: block;
+}

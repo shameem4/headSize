@@ -15,11 +15,14 @@
 <section id="demos" class="invisible">
 
   <div id="liveView" class="videoView">
-
-    <div style="position: relative;">
+    <div class="video-shell">
       <video id="webcam" autoplay playsinline></video>
       <canvas class="output_canvas" id="output_canvas" width="1280" height="720" style="position: absolute; left: 0px; top: 0px;"></canvas>
-      <p id='gesture_output' class="output">
+      <p id='gesture_output' class="output"></p>
+      <div class="distance-meter" id="distance_meter">
+        <span id="distance_value">--</span>
+        <span class="distance-unit">cm</span>
+      </div>
     </div>
   </div>
 </section>

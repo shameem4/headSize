@@ -44,7 +44,7 @@ body {
   bottom: 20px;
   left: 20px;
   padding: 10px 16px;
-  min-width: 120px;
+  min-width: 240px;
   border-radius: 16px;
   background: rgba(0, 0, 0, 0.65);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -76,6 +76,116 @@ body {
   opacity: 0.8;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.nose-metrics {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  padding: 12px 16px;
+  min-width: 200px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  transform: translateY(-10px);
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+
+.nose-metrics.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.nose-metric-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 6px;
+}
+
+.nose-metric-row:last-child {
+  margin-bottom: 0;
+}
+
+.nose-metrics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.nose-metrics-title {
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.nose-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.nose-toggle input {
+  display: none;
+}
+
+.nose-toggle-slider {
+  width: 36px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.35);
+  position: relative;
+  transition: background 0.2s;
+}
+
+.nose-toggle-slider::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.2s;
+}
+
+.nose-toggle input:checked + .nose-toggle-slider {
+  background: #00ffc8;
+}
+
+.nose-toggle input:checked + .nose-toggle-slider::after {
+  transform: translateX(18px);
+}
+
+.nose-toggle-label {
+  letter-spacing: 0.08em;
+  opacity: 0.8;
+}
+
+.nose-metric-label {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  opacity: 1;
+}
+
+.nose-metric-value {
+  font-weight: 600;
 }
 
 @keyframes distancePulse {

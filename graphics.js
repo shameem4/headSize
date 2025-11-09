@@ -1,22 +1,63 @@
-export const NOSE_METRIC_COLORS = {
-  bridge: "#FF9F43",
-  padSpan: "#00FFC8",
-  padHeight: "#FFD166",
-  padAngle: "#4DA6FF",
-  flareAngle: "#FF6AD5",
-};
-
-export const EYE_WIDTH_COLORS = {
-  left: "#6AE1FF",
-  right: "#FF9BEA",
-};
+import {
+  COLOR_CONFIG,
+  LABEL_FONT,
+  NOSE_OVERLAY_OFFSETS,
+  NOSE_GRID_STYLE,
+  IPD_OVERLAY_CONFIG,
+  FACE_OVERLAY_CONFIG,
+  EYE_OVERLAY_CONFIG,
+} from "./config.js";
 
 export function createGraphics(canvasElement, canvasCtx) {
+  const noseColors = COLOR_CONFIG.noseMetrics || {};
+  const eyeWidthColors = COLOR_CONFIG.eyeWidths || {};
+  const ipdColors = COLOR_CONFIG.ipd || {};
+  const faceColor = COLOR_CONFIG.faceWidth || "#FFFFFF";
   const toDisplayX = (x) => canvasElement.width - x;
   const toDisplayPoint = (pt) => (pt ? { x: toDisplayX(pt.x), y: pt.y } : null);
+  const translatePoint = (point, direction, distance) =>
+    point && direction
+      ? { x: point.x + direction.x * distance, y: point.y + direction.y * distance }
+      : null;
+  const normalizeVector = (vec) => {
+    if (!vec) return null;
+    const length = Math.hypot(vec.x, vec.y);
+    if (!length) return null;
+    return { x: vec.x / length, y: vec.y / length };
+  };
 
-  function drawRotatedLabel(text, position, angle, color = "#FFFFFF") {
+  function measureLabel(text) {
+    canvasCtx.save();
+    canvasCtx.font = LABEL_FONT;
+    const metrics = canvasCtx.measureText(text);
+    canvasCtx.restore();
+    const height =
+      (metrics.actualBoundingBoxAscent ?? 0) + (metrics.actualBoundingBoxDescent ?? 0) || 18;
+    return { width: metrics.width, height };
+  }
+
+  function drawLabel(
+    text,
+    {
+      position,
+      angle = 0,
+      color = "#FFFFFF",
+      baseline = "middle",
+      align = "center",
+      leader,
+    } = {}
+  ) {
     if (!text || !position) return;
+    if (leader?.from) {
+      canvasCtx.save();
+      canvasCtx.strokeStyle = leader.color || color;
+      canvasCtx.lineWidth = leader.lineWidth ?? 1.5;
+      canvasCtx.beginPath();
+      canvasCtx.moveTo(leader.from.x, leader.from.y);
+      canvasCtx.lineTo(position.x, position.y);
+      canvasCtx.stroke();
+      canvasCtx.restore();
+    }
     let rot = angle;
     while (rot > Math.PI) rot -= Math.PI * 2;
     while (rot <= -Math.PI) rot += Math.PI * 2;
@@ -27,12 +68,117 @@ export function createGraphics(canvasElement, canvasCtx) {
     canvasCtx.translate(position.x, position.y);
     canvasCtx.rotate(rot);
     canvasCtx.fillStyle = color;
-    canvasCtx.font = "bold 18px 'Segoe UI', sans-serif";
-    canvasCtx.textAlign = "center";
-    canvasCtx.textBaseline = "middle";
+    canvasCtx.font = LABEL_FONT;
+    canvasCtx.textAlign = align;
+    canvasCtx.textBaseline = baseline;
     canvasCtx.fillText(text, 0, 0);
     canvasCtx.restore();
   }
+
+  function normalizeRailOptions(options = {}) {
+    return {
+      offset: options.offset ?? 0,
+      color: options.color ?? "#FFFFFF",
+      lineWidth: options.lineWidth ?? 2,
+      connectBase: options.connectBase ?? true,
+      offsetOrientation: options.offsetOrientation ?? "perpendicular",
+      drawRail: options.drawRail ?? true,
+      label: options.label ?? null,
+    };
+  }
+
+  function drawRailSegment(baseStart, baseEnd, options = {}) {
+    const { offset, color, lineWidth, connectBase, offsetOrientation, drawRail, label } =
+      normalizeRailOptions(options);
+    if (!baseStart || !baseEnd) return null;
+    const vec = { x: baseEnd.x - baseStart.x, y: baseEnd.y - baseStart.y };
+    const length = Math.hypot(vec.x, vec.y) || 1;
+    const norm = { x: vec.x / length, y: vec.y / length };
+    const perp = { x: -norm.y, y: norm.x };
+    const resolveOrientation = (mode) => {
+      if (!mode || mode === "perpendicular") return perp;
+      if (mode === "parallel") return norm;
+      if (mode === "horizontal") return { x: 1, y: 0 };
+      if (mode === "vertical") return { x: 0, y: 1 };
+      if (typeof mode === "number") {
+        return { x: Math.cos(mode), y: Math.sin(mode) };
+      }
+      if (typeof mode === "object" && mode.x != null && mode.y != null) {
+        return normalizeVector(mode) || perp;
+      }
+      return perp;
+    };
+
+    const offsetDir = resolveOrientation(offsetOrientation);
+    const offsetVec = { x: offsetDir.x * offset, y: offsetDir.y * offset };
+    const offsetStart = {
+      x: baseStart.x + offsetVec.x,
+      y: baseStart.y + offsetVec.y,
+    };
+    const offsetEnd = {
+      x: baseEnd.x + offsetVec.x,
+      y: baseEnd.y + offsetVec.y,
+    };
+
+    if (drawRail) {
+      canvasCtx.save();
+      canvasCtx.strokeStyle = color;
+      canvasCtx.lineWidth = lineWidth;
+      canvasCtx.beginPath();
+      canvasCtx.moveTo(offsetStart.x, offsetStart.y);
+      canvasCtx.lineTo(offsetEnd.x, offsetEnd.y);
+      if (connectBase) {
+        canvasCtx.moveTo(offsetStart.x, offsetStart.y);
+        canvasCtx.lineTo(baseStart.x, baseStart.y);
+        canvasCtx.moveTo(offsetEnd.x, offsetEnd.y);
+        canvasCtx.lineTo(baseEnd.x, baseEnd.y);
+      }
+      canvasCtx.stroke();
+      canvasCtx.restore();
+    }
+
+    const geometry = {
+      angle: Math.atan2(vec.y, vec.x),
+      perp: offsetDir,
+      midPoint: {
+        x: (offsetStart.x + offsetEnd.x) / 2,
+        y: (offsetStart.y + offsetEnd.y) / 2,
+      },
+      offsetStart,
+      offsetEnd,
+    };
+
+    if (label?.text) {
+      const labelColor = label.color || color;
+      let labelPosition = label.position;
+      if (!labelPosition) {
+        const labelOffset = label.offset || {};
+        const labelOrientation = labelOffset.orientation ?? "perpendicular";
+        const labelDir = resolveOrientation(labelOrientation);
+        const labelDistance = labelOffset.distance ?? 0;
+        const referencePoint =
+          labelOffset.reference === "start"
+            ? geometry.offsetStart
+            : labelOffset.reference === "end"
+              ? geometry.offsetEnd
+              : geometry.midPoint;
+        labelPosition = translatePoint(referencePoint, labelDir, labelDistance);
+      }
+
+      drawLabel(label.text, {
+        position: labelPosition,
+        angle: label.angle ?? geometry.angle,
+        color: labelColor,
+        align: label.align,
+        baseline: label.baseline,
+        leader: label.leader,
+      });
+    }
+
+    return geometry;
+  }
+
+
 
   function drawSmoothCurve(points) {
     if (points.length < 2) return;
@@ -52,7 +198,7 @@ export function createGraphics(canvasElement, canvasCtx) {
     canvasCtx.stroke();
   }
 
-  function drawNoseGrid(landmarks, noseIndices, color = "#ffffff63") {
+  function drawNoseGrid(landmarks, noseIndices, color = NOSE_GRID_STYLE.color) {
     if (!landmarks?.length || !noseIndices?.length) return;
     const getPoint = (idx) => {
       const lm = landmarks[idx];
@@ -79,7 +225,7 @@ export function createGraphics(canvasElement, canvasCtx) {
 
     canvasCtx.save();
     canvasCtx.strokeStyle = color;
-    canvasCtx.lineWidth = 1.5;
+    canvasCtx.lineWidth = NOSE_GRID_STYLE.lineWidth;
 
     noseIndices.forEach((row) => drawSegments(row));
 
@@ -98,11 +244,12 @@ export function createGraphics(canvasElement, canvasCtx) {
     const right = toDisplayPoint(row.right);
     if (!left || !right) return;
     const direction = placement === "top" ? -1 : 1;
-    const offset = 8;
+    const bracketOffsets = NOSE_OVERLAY_OFFSETS.horizontalBracket;
+    const lineOffset = bracketOffsets.lineOffset;
     const lineY =
       direction === -1
-        ? Math.min(left.y, right.y) + direction * offset
-        : Math.max(left.y, right.y) + direction * offset;
+        ? Math.min(left.y, right.y) + direction * lineOffset
+        : Math.max(left.y, right.y) + direction * lineOffset;
 
     canvasCtx.save();
     canvasCtx.strokeStyle = color;
@@ -117,11 +264,14 @@ export function createGraphics(canvasElement, canvasCtx) {
     canvasCtx.stroke();
     canvasCtx.restore();
 
+    const labelText = `${label} ${value.toFixed(1)} mm`;
+    const labelSize = measureLabel(labelText);
+    const labelOffset = labelSize.height / 2 + bracketOffsets.labelPadding;
     const labelPos = {
       x: (left.x + right.x) / 2,
-      y: lineY + direction * 16,
+      y: lineY + direction * labelOffset,
     };
-    drawRotatedLabel(`${label} ${value.toFixed(1)} mm`, labelPos, 0, color);
+    drawLabel(labelText, { position: labelPos, color });
   }
 
   function drawPadHeightBracket(bridgeRow, padRow, value, color) {
@@ -129,31 +279,31 @@ export function createGraphics(canvasElement, canvasCtx) {
     const bridgePt = toDisplayPoint(bridgeRow.left);
     const padPt = toDisplayPoint(padRow.left);
     if (!bridgePt || !padPt) return;
-    const offsetX = Math.min(bridgePt.x, padPt.x) + 60;
+    const horizontalInset = NOSE_OVERLAY_OFFSETS.padHeight.horizontalInset;
+    const offsetTargetX = Math.min(bridgePt.x, padPt.x) + horizontalInset;
+    const offsetValue = offsetTargetX - bridgePt.x;
 
-    canvasCtx.save();
-    canvasCtx.strokeStyle = color;
-    canvasCtx.lineWidth = 2;
-    canvasCtx.beginPath();
-    canvasCtx.moveTo(bridgePt.x, bridgePt.y);
-    canvasCtx.lineTo(offsetX, bridgePt.y);
-    canvasCtx.lineTo(offsetX, padPt.y);
-    canvasCtx.lineTo(padPt.x, padPt.y);
-    canvasCtx.stroke();
-    canvasCtx.restore();
+    const labelText = `Pad Height ${value.toFixed(1)} mm`;
+    const labelSize = measureLabel(labelText);
+    const labelGap = NOSE_OVERLAY_OFFSETS.padHeight.labelGap + labelSize.height / 2;
+    const directionSign = offsetValue >= 0 ? 1 : -1;
 
-    const labelPos = {
-      x: offsetX + 90,
-      y: (bridgePt.y + padPt.y) / 2,
-    };
-    drawRotatedLabel(`Pad Height ${value.toFixed(1)} mm`, labelPos, -Math.PI / 2, color);
+    drawRailSegment(bridgePt, padPt, {
+      offset: offsetValue,
+      offsetOrientation: "horizontal",
+      color,
+      label: {
+        text: labelText,
+        angle: -Math.PI / 2,
+        offset: {
+          orientation: "horizontal",
+          distance: labelGap * directionSign,
+        },
+      },
+    });
   }
 
-  function drawPadAngleGuide(lines, value, color) {
-    if (!lines || !Number.isFinite(value)) return;
-    const origin = toDisplayPoint(lines.origin);
-    const endA = toDisplayPoint(lines.lineAEnd);
-    const endB = toDisplayPoint(lines.lineBEnd);
+  function drawAngleGuide({ origin, endA, endB }, { label, color, labelOffset, labelAngle = 0 }) {
     if (!origin || !endA || !endB) return;
 
     canvasCtx.save();
@@ -167,11 +317,36 @@ export function createGraphics(canvasElement, canvasCtx) {
     canvasCtx.stroke();
     canvasCtx.restore();
 
+    if (!label) return;
+    const labelSize = measureLabel(label);
     const labelPos = {
-      x: origin.x + 45,
-      y: Math.min(endA.y, endB.y) - 10,
+      x: origin.x + (labelSize.width / 2 + (labelOffset?.x ?? 0)),
+      y: origin.y - (labelSize.height / 2 + (labelOffset?.y ?? 0)),
     };
-    drawRotatedLabel(`Pad Angle ${value.toFixed(1)}°`, labelPos, 0, color);
+    drawLabel(label, { position: labelPos, angle: labelAngle, color });
+  }
+
+  function drawPadAngleGuide(lines, value, color) {
+    if (!lines || !Number.isFinite(value)) return;
+    const geometry = {
+      origin: toDisplayPoint(lines.origin),
+      endA: toDisplayPoint(lines.lineAEnd),
+      endB: toDisplayPoint(lines.lineBEnd),
+    };
+    if (!geometry.origin || !geometry.endA || !geometry.endB) return;
+    const { labelOffsetX, labelOffsetY } = NOSE_OVERLAY_OFFSETS.padAngle;
+    const label = `Pad Angle ${value.toFixed(1)}°`;
+    const topY = Math.min(geometry.endA.y, geometry.endB.y);
+    const labelPos = {
+      x: geometry.origin.x + labelOffsetX,
+      y: topY - labelOffsetY,
+    };
+
+    drawAngleGuide(geometry, {
+      label,
+      color,
+      labelOffset: { x: labelOffsetX, y: geometry.origin.y - labelPos.y },
+    });
   }
 
   function drawFlareAngleGuide(padRow, value, color) {
@@ -184,81 +359,69 @@ export function createGraphics(canvasElement, canvasCtx) {
     const right = toDisplayPoint(padRow.right);
     const vertex = toDisplayPoint(center);
     if (!left || !right || !vertex) return;
-    const offsetY = Math.max(left.y, right.y) + 12;
+    const { baseOffsetY, labelOffsetY } = NOSE_OVERLAY_OFFSETS.flareAngle;
+    const offsetY = Math.max(left.y, right.y) + baseOffsetY;
     const bottomCenter = { x: vertex.x, y: offsetY };
 
-    canvasCtx.save();
-    canvasCtx.strokeStyle = color;
-    canvasCtx.lineWidth = 2;
-    canvasCtx.beginPath();
-    canvasCtx.moveTo(bottomCenter.x, bottomCenter.y);
-    canvasCtx.lineTo(left.x, left.y);
-    canvasCtx.moveTo(bottomCenter.x, bottomCenter.y);
-    canvasCtx.lineTo(right.x, right.y);
-    canvasCtx.stroke();
-    canvasCtx.restore();
-
-    const labelPos = {
-      x: bottomCenter.x,
-      y: bottomCenter.y + 18,
-    };
-    drawRotatedLabel(`Flare Angle ${value.toFixed(1)}°`, labelPos, 0, color);
+    drawAngleGuide(
+      {
+        origin: bottomCenter,
+        endA: left,
+        endB: right,
+      },
+      {
+        label: `Flare Angle ${value.toFixed(1)}°`,
+        color,
+        labelOffset: { x: 0, y: -labelOffsetY },
+      }
+    );
   }
 
-  function drawEyeWidthRail(segment, label, value, color, offset = 18) {
+  function drawEyeWidthRail(
+    segment,
+    label,
+    value,
+    color,
+    {
+      offset = EYE_OVERLAY_CONFIG.railOffset,
+      textLift = EYE_OVERLAY_CONFIG.textLift ?? 18,
+      align = EYE_OVERLAY_CONFIG.textAlign ?? "center",
+      drawRail = EYE_OVERLAY_CONFIG.drawRail !== false,
+    } = {}
+  ) {
     if (!segment?.points || !Number.isFinite(value)) return;
     const start = { x: toDisplayX(segment.points[0].x), y: segment.points[0].y };
     const end = { x: toDisplayX(segment.points[1].x), y: segment.points[1].y };
-    const vec = { x: end.x - start.x, y: end.y - start.y };
-    const len = Math.hypot(vec.x, vec.y) || 1;
-    const norm = { x: vec.x / len, y: vec.y / len };
-    const perp = { x: -norm.y, y: norm.x };
-    const leftLabel = {
-      x: start.x + perp.x * offset,
-      y: start.y + perp.y * offset,
-    };
-    const rightLabel = {
-      x: end.x + perp.x * offset,
-      y: end.y + perp.y * offset,
-    };
-    const midPoint = {
-      x: (leftLabel.x + rightLabel.x) / 2,
-      y: (leftLabel.y + rightLabel.y) / 2,
-    };
-
-    canvasCtx.save();
-    canvasCtx.strokeStyle = color;
-    canvasCtx.lineWidth = 2;
-    canvasCtx.beginPath();
-    canvasCtx.moveTo(leftLabel.x, leftLabel.y);
-    canvasCtx.lineTo(rightLabel.x, rightLabel.y);
-    canvasCtx.moveTo(leftLabel.x, leftLabel.y);
-    canvasCtx.lineTo(start.x, start.y);
-    canvasCtx.moveTo(rightLabel.x, rightLabel.y);
-    canvasCtx.lineTo(end.x, end.y);
-    canvasCtx.stroke();
-    canvasCtx.restore();
-
-    drawRotatedLabel(`${label} ${value.toFixed(1)} mm`, midPoint, Math.atan2(vec.y, vec.x), color);
+    drawRailSegment(start, end, {
+      offset,
+      color,
+      drawRail,
+      label: {
+        text: `${label} ${value.toFixed(1)} mm`,
+        offset: { distance: textLift },
+        color,
+        align,
+      },
+    });
   }
 
   function drawNoseOverlay(metrics) {
     if (!metrics?.rows) return;
     const { bridge, pad, tip } = metrics.rows;
     if (Number.isFinite(metrics.bridgeWidthMm)) {
-      drawHorizontalBracket(bridge, "Bridge width", metrics.bridgeWidthMm, NOSE_METRIC_COLORS.bridge, "top");
+      drawHorizontalBracket(bridge, "Bridge width", metrics.bridgeWidthMm, noseColors.bridge, "top");
     }
     if (Number.isFinite(metrics.padSpanMm)) {
-      drawHorizontalBracket(pad, "Pad width", metrics.padSpanMm, NOSE_METRIC_COLORS.padSpan, "top");
+      drawHorizontalBracket(pad, "Pad width", metrics.padSpanMm, noseColors.padSpan, "top");
     }
     if (Number.isFinite(metrics.padHeightMm)) {
-      drawPadHeightBracket(bridge, pad, metrics.padHeightMm, NOSE_METRIC_COLORS.padHeight);
+      drawPadHeightBracket(bridge, pad, metrics.padHeightMm, noseColors.padHeight);
     }
     if (Number.isFinite(metrics.padAngleDeg) && metrics.padAngleLines) {
-      drawPadAngleGuide(metrics.padAngleLines, metrics.padAngleDeg, NOSE_METRIC_COLORS.padAngle);
+      drawPadAngleGuide(metrics.padAngleLines, metrics.padAngleDeg, noseColors.padAngle);
     }
     if (Number.isFinite(metrics.flareAngleDeg)) {
-      drawFlareAngleGuide(pad, metrics.flareAngleDeg, NOSE_METRIC_COLORS.flareAngle);
+      drawFlareAngleGuide(pad, metrics.flareAngleDeg, noseColors.flareAngle);
     }
   }
 
@@ -272,98 +435,42 @@ export function createGraphics(canvasElement, canvasCtx) {
       x: toDisplayX(ipdData.right.x),
       y: ipdData.right.y,
     };
-    const baseVec = {
-      x: rightPupilDisplay.x - leftPupilDisplay.x,
-      y: rightPupilDisplay.y - leftPupilDisplay.y,
-    };
-    const baseLen = Math.hypot(baseVec.x, baseVec.y) || 1;
-    const baseNorm = { x: baseVec.x / baseLen, y: baseVec.y / baseLen };
-    const perp = { x: -baseNorm.y, y: baseNorm.x };
-    const textLift = 18;
-    const baseAngle = Math.atan2(baseVec.y, baseVec.x);
+    const textLift = IPD_OVERLAY_CONFIG.textLift ?? 18;
 
-    const drawRail = (offset, color, label) => {
-      const leftLabel = {
-        x: leftPupilDisplay.x + perp.x * offset,
-        y: leftPupilDisplay.y + perp.y * offset,
-      };
-      const rightLabel = {
-        x: rightPupilDisplay.x + perp.x * offset,
-        y: rightPupilDisplay.y + perp.y * offset,
-      };
-      const leftTextAnchor = {
-        x: leftLabel.x + perp.x * textLift,
-        y: leftLabel.y + perp.y * textLift,
-      };
-      const rightTextAnchor = {
-        x: rightLabel.x + perp.x * textLift,
-        y: rightLabel.y + perp.y * textLift,
-      };
-      const midPoint = {
-        x: (leftTextAnchor.x + rightTextAnchor.x) / 2,
-        y: (leftTextAnchor.y + rightTextAnchor.y) / 2,
-      };
-
-      canvasCtx.save();
-      canvasCtx.strokeStyle = color;
-      canvasCtx.lineWidth = 2;
-      canvasCtx.beginPath();
-      canvasCtx.moveTo(leftLabel.x, leftLabel.y);
-      canvasCtx.lineTo(rightLabel.x, rightLabel.y);
-      canvasCtx.moveTo(leftLabel.x, leftLabel.y);
-      canvasCtx.lineTo(leftPupilDisplay.x, leftPupilDisplay.y);
-      canvasCtx.moveTo(rightLabel.x, rightLabel.y);
-      canvasCtx.lineTo(rightPupilDisplay.x, rightPupilDisplay.y);
-      canvasCtx.stroke();
-      canvasCtx.restore();
-
-      drawRotatedLabel(label, midPoint, baseAngle, color);
-    };
-
-    drawRail(55, "#FFFFFF", `Near ${ipdData.near.toFixed(1)} mm`);
-    if (Number.isFinite(ipdData.far)) {
-      drawRail(85, "#A0FFE6", `Far ${ipdData.far.toFixed(1)} mm`);
-    }
+    IPD_OVERLAY_CONFIG.rails.forEach(({ key, label, offset, drawRail = true, textAlign }) => {
+      const value = ipdData[key];
+      if (!Number.isFinite(value)) return;
+      const color = ipdColors[key] || "#FFFFFF";
+      drawRailSegment(leftPupilDisplay, rightPupilDisplay, {
+        offset,
+        color,
+        drawRail,
+        label: {
+          text: `${label} ${value.toFixed(1)} mm`,
+          offset: { distance: textLift },
+          align: textAlign || "center",
+          color,
+        },
+      });
+    });
   }
 
   function drawFaceWidthMeasurement(faceData) {
     if (!faceData) return;
     const left = { x: toDisplayX(faceData.left.x), y: faceData.left.y };
     const right = { x: toDisplayX(faceData.right.x), y: faceData.right.y };
-    const faceVec = { x: right.x - left.x, y: right.y - left.y };
-    const faceLen = Math.hypot(faceVec.x, faceVec.y) || 1;
-    const faceNorm = { x: faceVec.x / faceLen, y: faceVec.y / faceLen };
-    const facePerp = { x: -faceNorm.y, y: faceNorm.x };
-    const spanOffset = 50;
-    const labelLift = 16;
-    const leftFaceLabel = {
-      x: left.x + facePerp.x * spanOffset,
-      y: left.y + facePerp.y * spanOffset,
-    };
-    const rightFaceLabel = {
-      x: right.x + facePerp.x * spanOffset,
-      y: right.y + facePerp.y * spanOffset,
-    };
-    const faceMid = {
-      x: (leftFaceLabel.x + rightFaceLabel.x) / 2 + facePerp.x * labelLift,
-      y: (leftFaceLabel.y + rightFaceLabel.y) / 2 + facePerp.y * labelLift,
-    };
-    const faceAngle = Math.atan2(faceVec.y, faceVec.x);
-
-    canvasCtx.save();
-    canvasCtx.strokeStyle = "#FFFFFF";
-    canvasCtx.lineWidth = 2;
-    canvasCtx.beginPath();
-    canvasCtx.moveTo(leftFaceLabel.x, leftFaceLabel.y);
-    canvasCtx.lineTo(rightFaceLabel.x, rightFaceLabel.y);
-    canvasCtx.moveTo(leftFaceLabel.x, leftFaceLabel.y);
-    canvasCtx.lineTo(left.x, left.y);
-    canvasCtx.moveTo(rightFaceLabel.x, rightFaceLabel.y);
-    canvasCtx.lineTo(right.x, right.y);
-    canvasCtx.stroke();
-    canvasCtx.restore();
-
-    drawRotatedLabel(`Face ${faceData.valueMm.toFixed(1)} mm`, faceMid, faceAngle, "#FFFFFF");
+    const spanOffset = FACE_OVERLAY_CONFIG.spanOffset ?? 50;
+    const labelLift = FACE_OVERLAY_CONFIG.labelLift ?? 16;
+    const faceLabel = FACE_OVERLAY_CONFIG.label || "Face";
+    drawRailSegment(left, right, {
+      offset: spanOffset,
+      color: faceColor,
+      label: {
+        text: `${faceLabel} ${faceData.valueMm.toFixed(1)} mm`,
+        color: faceColor,
+        offset: { distance: labelLift },
+      },
+    });
   }
 
   function drawMeasurementOverlays(state, { noseOverlayEnabled = false } = {}) {
@@ -375,10 +482,10 @@ export function createGraphics(canvasElement, canvasCtx) {
     if (state.ipd) drawIpdMeasurement(state.ipd);
     if (state.faceWidth) drawFaceWidthMeasurement(state.faceWidth);
     if (state.eyes?.left) {
-      drawEyeWidthRail(state.eyes.left, "Left eye", state.eyes.left.valueMm, EYE_WIDTH_COLORS.left, 20);
+      drawEyeWidthRail(state.eyes.left, "Left eye", state.eyes.left.valueMm, eyeWidthColors.left);
     }
     if (state.eyes?.right) {
-      drawEyeWidthRail(state.eyes.right, "Right eye", state.eyes.right.valueMm, EYE_WIDTH_COLORS.right, 20);
+      drawEyeWidthRail(state.eyes.right, "Right eye", state.eyes.right.valueMm, eyeWidthColors.right);
     }
   }
 

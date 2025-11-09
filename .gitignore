@@ -21,3 +21,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+/debug_out
+canonical_face_model_uv_visualization.png
+arrange_grid_bbox.py
+facemesh_indices.png
+masked_image.png
+new.py
+process.py
+output.csv

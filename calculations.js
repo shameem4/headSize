@@ -1,20 +1,89 @@
 const EPSILON = 1e-3;
 
-export function pixelsPerMillimeter(pixelLength, irisDiameterMm = 11.7) {
+function pixelsPerMillimeter(pixelLength, irisDiameterMm = 11.7) {
   return pixelLength > 0 ? pixelLength / irisDiameterMm : null;
 }
 
-export function millimetersPerPixel(pixelLength, irisDiameterMm = 11.7) {
+function millimetersPerPixel(pixelLength, irisDiameterMm = 11.7) {
   const pxPerMm = pixelsPerMillimeter(pixelLength, irisDiameterMm);
   return pxPerMm ? 1 / pxPerMm : null;
 }
 
-export function estimateCameraDistanceCm(diameterPx, focalLengthPx, irisDiameterMm = 11.7) {
+function estimateCameraDistanceCm(diameterPx, focalLengthPx, irisDiameterMm = 11.7) {
   const mmPerPx = millimetersPerPixel(diameterPx, irisDiameterMm);
   if (!mmPerPx) return null;
   const distanceX = (focalLengthPx.x * mmPerPx) / 10;
   const distanceY = (focalLengthPx.y * mmPerPx) / 10;
   return (distanceX + distanceY) / 2;
+}
+
+function extractRotation(matrixData) {
+  if (!matrixData || matrixData.length < 9) return null;
+  const r00 = matrixData[0];
+  const r01 = matrixData[1];
+  const r02 = matrixData[2];
+  const r10 = matrixData[4];
+  const r11 = matrixData[5];
+  const r12 = matrixData[6];
+  const r20 = matrixData[8];
+  const r21 = matrixData[9];
+  const r22 = matrixData[10];
+
+  const sy = Math.sqrt(r00 * r00 + r10 * r10);
+  const singular = sy < 1e-6;
+
+  let x;
+  let y;
+  let z;
+  if (!singular) {
+    x = Math.atan2(r21, r22);
+    y = Math.atan2(-r20, sy);
+    z = Math.atan2(r10, r00);
+  } else {
+    x = Math.atan2(-r12, r11);
+    y = Math.atan2(-r20, sy);
+    z = 0;
+  }
+  return {
+    pitch: (x * 180) / Math.PI,
+    yaw: (y * 180) / Math.PI,
+    roll: (z * 180) / Math.PI,
+    rotationMatrix: [
+      [r00, r01, r02],
+      [r10, r11, r12],
+      [r20, r21, r22],
+    ],
+  };
+}
+
+function projectLandmark(landmarks, index, canvasWidth, canvasHeight) {
+  const lm = landmarks?.[index];
+  if (!lm) return null;
+  return {
+    x: lm.x * canvasWidth,
+    y: lm.y * canvasHeight,
+  };
+}
+
+function buildLandmarkPair(landmarks, indexMap, canvasWidth, canvasHeight) {
+  if (!landmarks || !indexMap) return null;
+  const entries = Object.entries(indexMap);
+  const result = {};
+  for (const [key, idx] of entries) {
+    const point = projectLandmark(landmarks, idx, canvasWidth, canvasHeight);
+    if (!point) return null;
+    result[key] = point;
+  }
+  return result;
+}
+
+function buildNoseGridPoints(landmarks, noseIndices, canvasWidth, canvasHeight) {
+  if (!landmarks || !Array.isArray(noseIndices)) return null;
+  return noseIndices.map((row) =>
+    row.map((idx) =>
+      typeof idx === "number" ? projectLandmark(landmarks, idx, canvasWidth, canvasHeight) : null
+    )
+  );
 }
 
 function computeRowMetrics(rowPoints) {
@@ -45,7 +114,7 @@ function computeRowMetrics(rowPoints) {
   };
 }
 
-export function computeNoseMetrics(gridPoints, mmPerPx) {
+function computeNoseMetrics(gridPoints, mmPerPx) {
   if (!gridPoints || !Number.isFinite(mmPerPx) || mmPerPx <= 0) return null;
   const rowCount = gridPoints.length;
   if (!rowCount) return null;
@@ -146,7 +215,7 @@ export function computeNoseMetrics(gridPoints, mmPerPx) {
   };
 }
 
-export function extractEyeSegment(landmarks, idxPair, canvasWidth, canvasHeight) {
+function extractEyeSegment(landmarks, idxPair, canvasWidth, canvasHeight) {
   const a = landmarks[idxPair[0]];
   const b = landmarks[idxPair[1]];
   if (!a || !b) return null;
@@ -163,7 +232,7 @@ export function extractEyeSegment(landmarks, idxPair, canvasWidth, canvasHeight)
   };
 }
 
-export function buildIpdMeasurement(leftIris, rightIris, mmPerPx) {
+function buildIpdMeasurement(leftIris, rightIris, mmPerPx) {
   if (!leftIris || !rightIris || !Number.isFinite(mmPerPx)) return null;
   const dxPx = rightIris.center.x - leftIris.center.x;
   const dyPx = rightIris.center.y - leftIris.center.y;
@@ -178,7 +247,7 @@ export function buildIpdMeasurement(leftIris, rightIris, mmPerPx) {
   };
 }
 
-export function buildFaceWidthMeasurement(points, mmPerPx) {
+function buildFaceWidthMeasurement(points, mmPerPx) {
   if (!points?.left || !points?.right || !Number.isFinite(mmPerPx)) return null;
   const faceWidthPx = Math.hypot(points.right.x - points.left.x, points.right.y - points.left.y);
   const faceWidthMm = faceWidthPx * mmPerPx;
@@ -190,11 +259,51 @@ export function buildFaceWidthMeasurement(points, mmPerPx) {
   };
 }
 
-export function buildEyeWidthMeasurement(segment, mmPerPx) {
+function buildEyeWidthMeasurement(segment, mmPerPx) {
   if (!segment?.pxLength || !Number.isFinite(mmPerPx)) return null;
   return {
     valueMm: segment.pxLength * mmPerPx,
     points: segment.points.map((pt) => ({ ...pt })),
+  };
+}
+
+function computeIrisMeasurement(
+  landmarks,
+  irisIdx,
+  pupilIdx,
+  canvasWidth,
+  canvasHeight,
+  estimateDistanceFn
+) {
+  const pupil = landmarks?.[pupilIdx];
+  if (!pupil || !Array.isArray(irisIdx) || irisIdx.length !== 4) return null;
+  const irisPts = irisIdx
+    .map((idx) => landmarks[idx])
+    .map((pt) =>
+      pt
+        ? {
+            x: pt.x * canvasWidth,
+            y: pt.y * canvasHeight,
+          }
+        : null
+    )
+    .filter(Boolean);
+  if (irisPts.length !== irisIdx.length) return null;
+
+  const circle = minEnclosingCircle(irisPts);
+  if (!circle || circle.radius <= 0) return null;
+
+  const diameter = circle.radius * 2;
+  const distanceCm =
+    typeof estimateDistanceFn === "function" ? estimateDistanceFn(diameter) : null;
+
+  return {
+    distanceCm,
+    diameterPx: diameter,
+    center: {
+      x: circle.center.x,
+      y: circle.center.y,
+    },
   };
 }
 
@@ -241,7 +350,7 @@ function isPointInsideCircle(point, circle) {
   return distanceBetweenPoints(point, circle.center) <= circle.radius + EPSILON;
 }
 
-export function minEnclosingCircle(points) {
+function minEnclosingCircle(points) {
   if (!points?.length) return null;
   let circle = null;
 
@@ -266,3 +375,32 @@ export function minEnclosingCircle(points) {
   }
   return circle;
 }
+
+export const ConversionUtils = {
+  pixelsPerMillimeter,
+  millimetersPerPixel,
+  estimateCameraDistanceCm,
+};
+
+export const PoseUtils = {
+  extractRotation,
+};
+
+export const ProjectionUtils = {
+  projectLandmark,
+  buildLandmarkPair,
+  buildNoseGridPoints,
+};
+
+export const MeasurementBuilders = {
+  computeNoseMetrics,
+  extractEyeSegment,
+  buildIpdMeasurement,
+  buildFaceWidthMeasurement,
+  buildEyeWidthMeasurement,
+  computeIrisMeasurement,
+};
+
+export const GeometryUtils = {
+  minEnclosingCircle,
+};

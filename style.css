@@ -18,12 +18,13 @@ body {
   justify-content: center;
 }
 
-/* Mirror the video for selfie view */
 #webcam {
+  display: block;
+}
+
+#webcam.mirrored {
   transform: scaleX(-1);
   -webkit-transform: scaleX(-1);
-  /* Ensure video stays in place */
-  display: block;
 }
 
 #webcam,
@@ -116,10 +117,18 @@ body {
 
 .nose-metrics-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
+}
+
+.nose-toggle-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .nose-metrics-title {

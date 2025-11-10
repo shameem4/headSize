@@ -5,7 +5,7 @@ import {
   NOSE_GRID_STYLE,
   IPD_OVERLAY_CONFIG,
   FACE_OVERLAY_CONFIG,
-  EYE_OVERLAY_CONFIG,
+  EYE_WIDTH_OVERLAY_CONFIG,
 } from "./config.js";
 
 export function createGraphics(canvasElement, canvasCtx) {
@@ -199,7 +199,13 @@ export function createGraphics(canvasElement, canvasCtx) {
   }
 
   function drawNoseGrid(landmarks, noseIndices, color = NOSE_GRID_STYLE.color) {
-    if (!landmarks?.length || !noseIndices?.length) return;
+    if (!landmarks?.length || !noseIndices) return;
+    const rows = (() => {
+      if (Array.isArray(noseIndices)) return noseIndices;
+      if (Array.isArray(noseIndices.rows)) return noseIndices.rows;
+      return Object.values(noseIndices).filter(Array.isArray);
+    })();
+    if (!rows.length) return;
     const getPoint = (idx) => {
       const lm = landmarks[idx];
       if (!lm) return null;
@@ -227,11 +233,11 @@ export function createGraphics(canvasElement, canvasCtx) {
     canvasCtx.strokeStyle = color;
     canvasCtx.lineWidth = NOSE_GRID_STYLE.lineWidth;
 
-    noseIndices.forEach((row) => drawSegments(row));
+    rows.forEach((row) => drawSegments(row));
 
-    const maxCols = Math.max(...noseIndices.map((row) => row.length));
+    const maxCols = Math.max(...rows.map((row) => row?.length || 0));
     for (let col = 0; col < maxCols; col++) {
-      const column = noseIndices.map((row) => (typeof row[col] === "number" ? row[col] : null));
+      const column = rows.map((row) => (typeof row[col] === "number" ? row[col] : null));
       drawSegments(column);
     }
 
@@ -383,10 +389,10 @@ export function createGraphics(canvasElement, canvasCtx) {
     value,
     color,
     {
-      offset = EYE_OVERLAY_CONFIG.railOffset,
-      textLift = EYE_OVERLAY_CONFIG.textLift ?? 18,
-      align = EYE_OVERLAY_CONFIG.textAlign ?? "center",
-      drawRail = EYE_OVERLAY_CONFIG.drawRail !== false,
+      offset = EYE_WIDTH_OVERLAY_CONFIG.railOffset,
+      textLift = EYE_WIDTH_OVERLAY_CONFIG.textLift ?? 18,
+      align = EYE_WIDTH_OVERLAY_CONFIG.textAlign ?? "center",
+      drawRail = EYE_WIDTH_OVERLAY_CONFIG.drawRail !== false,
     } = {}
   ) {
     if (!segment?.points || !Number.isFinite(value)) return;
@@ -482,10 +488,10 @@ export function createGraphics(canvasElement, canvasCtx) {
     if (state.ipd) drawIpdMeasurement(state.ipd);
     if (state.faceWidth) drawFaceWidthMeasurement(state.faceWidth);
     if (state.eyes?.left) {
-      drawEyeWidthRail(state.eyes.left, "Left eye", state.eyes.left.valueMm, eyeWidthColors.left);
+      drawEyeWidthRail(state.eyes.left, "L width", state.eyes.left.valueMm, eyeWidthColors.left);
     }
     if (state.eyes?.right) {
-      drawEyeWidthRail(state.eyes.right, "Right eye", state.eyes.right.valueMm, eyeWidthColors.right);
+      drawEyeWidthRail(state.eyes.right, "R width", state.eyes.right.valueMm, eyeWidthColors.right);
     }
   }
 

@@ -39,6 +39,7 @@ const distanceValueEl = document.getElementById("distance_value");
 const noseMetricsEl = document.getElementById("nose_metrics");
 const noseMetricsBodyEl = document.getElementById("nose_metrics_body");
 const noseOverlayToggleEl = document.getElementById("nose_overlay_toggle");
+const mirrorToggleEl = document.getElementById("mirror_toggle");
 const graphics = createGraphics(canvasElement, canvasCtx);
 const NOSE_METRIC_COLORS = COLOR_CONFIG.noseMetrics || {};
 
@@ -123,6 +124,15 @@ function decayDistanceDisplay() {
   }
 }
 
+function mirrorLandmarks(landmarks) {
+  if (!Array.isArray(landmarks)) return null;
+  return landmarks.map((lm) => {
+    if (!lm) return lm;
+    const mirroredX = Number.isFinite(lm.x) ? 1 - lm.x : lm.x;
+    return { ...lm, x: mirroredX };
+  });
+}
+
 // Enable the live webcam view and start detection.
 async function enableCam() {
   const constraints = {
@@ -153,6 +163,8 @@ let faceResults;
 let smoothedDistance = null;
 let lastDistanceUpdate = 0;
 let noseOverlayEnabled = false;
+let mirrorEnabled = true;
+let lastDisplayLandmarks = null;
 const measurementState = {
   ipd: null,
   faceWidth: null,
@@ -164,6 +176,22 @@ const head = createHeadTracker(HEAD_CONFIG);
 noseOverlayToggleEl?.addEventListener("change", (event) => {
   noseOverlayEnabled = Boolean(event.target?.checked);
 });
+
+function applyMirrorSetting() {
+  if (!video) return;
+  if (mirrorEnabled) {
+    video.classList.add("mirrored");
+  } else {
+    video.classList.remove("mirrored");
+  }
+}
+
+mirrorToggleEl?.addEventListener("change", (event) => {
+  mirrorEnabled = Boolean(event.target?.checked);
+  applyMirrorSetting();
+});
+
+applyMirrorSetting();
 
 function renderNoseMetrics(metrics) {
   if (!noseMetricsEl || !noseMetricsBodyEl) return;
@@ -233,6 +261,7 @@ function applyMeasurementOutputs() {
 function processFaceLandmarks() {
   if (!faceResults?.faceLandmarks) {
     head.reset();
+    lastDisplayLandmarks = null;
     return { frameDistanceCm: null };
   }
 
@@ -241,11 +270,12 @@ function processFaceLandmarks() {
   const canvasHeight = canvasElement.height;
 
   faceResults.faceLandmarks.forEach((landmarks) => {
-    if (!noseOverlayEnabled) {
-      graphics.drawNoseGrid(landmarks, HEAD_CONFIG.noseGridIndices.rows);
-    }
+    const mirroredLandmarks = mirrorEnabled ? mirrorLandmarks(landmarks) : null;
+    const displayLandmarks = mirroredLandmarks || landmarks;
+    if (!displayLandmarks) return;
+    lastDisplayLandmarks = displayLandmarks;
 
-    head.update(landmarks, canvasWidth, canvasHeight, estimateCameraDistanceCm);
+    head.update(displayLandmarks, canvasWidth, canvasHeight, estimateCameraDistanceCm);
 
     const leftIris = head.eyes.left.iris;
     const rightIris = head.eyes.right.iris;
@@ -265,10 +295,7 @@ async function renderFrame() {
     faceResults = faceLandmarker.detectForVideo(video, nowInMs);
   }
 
-  canvasCtx.save();
   canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-  canvasCtx.translate(canvasElement.width, 0); // Mirror horizontally.
-  canvasCtx.scale(-1, 1);
 
   const { frameDistanceCm } = processFaceLandmarks();
 
@@ -292,9 +319,10 @@ async function renderFrame() {
     decayDistanceDisplay();
   }
 
-  canvasCtx.restore();
-
   applyMeasurementOutputs();
+  if (lastDisplayLandmarks) {
+    graphics.drawNoseGrid(lastDisplayLandmarks, HEAD_CONFIG.noseGridIndices);
+  }
 
   graphics.drawMeasurementOverlays(measurementState, { noseOverlayEnabled });
 

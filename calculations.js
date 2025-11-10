@@ -78,12 +78,30 @@ function buildLandmarkPair(landmarks, indexMap, canvasWidth, canvasHeight) {
 }
 
 function buildNoseGridPoints(landmarks, noseIndices, canvasWidth, canvasHeight) {
-  if (!landmarks || !Array.isArray(noseIndices)) return null;
-  return noseIndices.map((row) =>
-    row.map((idx) =>
-      typeof idx === "number" ? projectLandmark(landmarks, idx, canvasWidth, canvasHeight) : null
-    )
-  );
+  if (!landmarks || !noseIndices) return null;
+  const projectIdx = (idx) =>
+    typeof idx === "number" ? projectLandmark(landmarks, idx, canvasWidth, canvasHeight) : null;
+
+  const mapRow = (row) => {
+    if (!Array.isArray(row)) return null;
+    return row.map((idx) => projectIdx(idx));
+  };
+
+  if (Array.isArray(noseIndices)) {
+    return noseIndices.map((row) => mapRow(row));
+  }
+
+  if (Array.isArray(noseIndices.rows)) {
+    return noseIndices.rows.map((row) => mapRow(row));
+  }
+
+  const mapped = {};
+  for (const [key, row] of Object.entries(noseIndices)) {
+    const projected = mapRow(row);
+    if (!projected) continue;
+    mapped[key] = projected;
+  }
+  return Object.keys(mapped).length ? mapped : null;
 }
 
 function computeRowMetrics(rowPoints) {
@@ -116,14 +134,17 @@ function computeRowMetrics(rowPoints) {
 
 function computeNoseMetrics(gridPoints, mmPerPx) {
   if (!gridPoints || !Number.isFinite(mmPerPx) || mmPerPx <= 0) return null;
-  const rowCount = gridPoints.length;
+
+  const isArrayGrid = Array.isArray(gridPoints);
+  const orderedRows = isArrayGrid ? gridPoints : Object.values(gridPoints);
+  const rowCount = orderedRows.length;
   if (!rowCount) return null;
-  const bridgeRowIndex = Math.min(2, rowCount - 1);
-  const padRowIndex = Math.min(3, rowCount - 1);
-  const bridgeRow = computeRowMetrics(gridPoints[bridgeRowIndex]);
-  const padRow = computeRowMetrics(gridPoints[padRowIndex]);
-  const tipRow = computeRowMetrics(gridPoints[rowCount - 1]);
-  const padRowPoints = gridPoints[padRowIndex] || [];
+
+
+  const bridgeRow = computeRowMetrics(gridPoints.bridgeRow);
+  const padRow = computeRowMetrics(gridPoints.padRow);
+  const tipRow = computeRowMetrics(gridPoints.tipRow);
+  const padRowPoints = Array.isArray(gridPoints.padRow) ? gridPoints.padRow : [];
   if (!bridgeRow || !padRow) return null;
 
   const toMm = (px) => px * mmPerPx;
@@ -131,11 +152,12 @@ function computeNoseMetrics(gridPoints, mmPerPx) {
   const padSpanMm = toMm(padRow.widthPx);
   const padHeightMm = Math.abs(padRow.midY - bridgeRow.midY) * mmPerPx;
 
-  const columnCount = gridPoints[0]?.length || 0;
+  const columnReference = orderedRows.find((row) => Array.isArray(row));
+  const columnCount = columnReference?.length || 0;
   const midColumn = Math.floor(columnCount / 2);
   const getColumnPoint = (rowIdx, colIdx) => {
-    const row = gridPoints[rowIdx];
-    if (!row || colIdx < 0 || colIdx >= row.length) return null;
+    const row = orderedRows[rowIdx];
+    if (!Array.isArray(row) || colIdx < 0 || colIdx >= row.length) return null;
     return row[colIdx];
   };
 
@@ -178,8 +200,8 @@ function computeNoseMetrics(gridPoints, mmPerPx) {
     topMid && bottomMid && diagPoint
       ? {
           origin: topMid,
-          lineAEnd: bottomMid,
-          lineBEnd: diagPoint,
+          lineAEnd: diagPoint,
+          lineBEnd: bottomMid,
         }
       : null;
 

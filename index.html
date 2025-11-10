@@ -1,49 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>headSize</title>
-  <link rel="stylesheet" href="style.css">
-
-
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-
-<section id="demos" class="invisible">
-
-  <div id="liveView" class="videoView">
-    <div class="video-shell">
-      <video id="webcam" autoplay playsinline></video>
-      <canvas class="output_canvas" id="output_canvas" width="1280" height="720" style="position: absolute; left: 0px; top: 0px;"></canvas>
-      <p id='gesture_output' class="output"></p>
-      <div class="distance-meter" id="distance_meter">
-        <span id="distance_value">--</span>
-        <span class="distance-unit">cm</span>
-      </div>
-      <div class="nose-metrics" id="nose_metrics">
-        <div class="nose-metrics-header">
-          <span class="nose-metrics-title">Nose Fit</span>
-          <div class="nose-toggle-group">
-            <label class="nose-toggle">
-              <input type="checkbox" id="nose_overlay_toggle" />
-              <span class="nose-toggle-slider"></span>
-              <span class="nose-toggle-label">Illustrate</span>
-            </label>
-            <label class="nose-toggle">
-              <input type="checkbox" id="mirror_toggle" checked />
-              <span class="nose-toggle-slider"></span>
-              <span class="nose-toggle-label">Mirror view</span>
-            </label>
-          </div>
+  <div class="app">
+    <!-- Left: camera window -->
+    <section id="demos" class="invisible">
+      <div id="liveView" class="videoView">
+        <div class="video-shell">
+          <video id="webcam" autoplay playsinline></video>
+          <canvas class="output_canvas" id="output_canvas" width="1280" height="720" style="position:absolute;left:0;top:0;"></canvas>
+          <!-- (Old in-canvas overlays removed) -->
         </div>
-        <div id="nose_metrics_body"></div>
       </div>
-    </div>
+    </section>
+
+    <!-- Right: combined metrics + controls -->
+    <aside class="metrics-panel" id="metrics_panel">
+      <header class="metrics-header">
+        <!-- <h1 class="metrics-title">Measurements</h1> -->
+      </header>
+        <div class="metrics-controls">
+          <!-- <label class="control">
+            <span class="control-label">Detail</span>
+            <select id="detail_select">
+              <option value="minimal">Minimal</option>
+              <option value="standard">Standard</option>
+              <option value="full" selected>Full</option>
+            </select>
+          </label> -->
+          <!-- <label class="control">
+            <span class="control-label">Focus</span>
+            <select id="focus_select">
+              <option value="global" selected>Global</option>
+              <option value="face">Face</option>
+              <option value="eyes">Eyes</option>
+              <option value="nose">Nose</option>
+            </select>
+          </label>
+          <label class="control toggle">
+            <input type="checkbox" id="nose_overlay_toggle" />
+            <span>Illustrate Nose</span>
+          </label> -->
+          <fieldset class="control-group">
+            <!-- <legend class="control-label">Focus</legend> -->
+            <div class="radio-options">
+              <label><input type="radio" name="focus" value="global"> Global</label>
+              <label><input type="radio" name="focus" value="face" checked> Face</label>
+              <label><input type="radio" name="focus" value="eyes"> Eyes</label>
+              <label><input type="radio" name="focus" value="nose"> Nose</label>
+            </div>
+          </fieldset>
+
+        </div>
+      
+
+      <div class="panel-body" id="metrics_panel_body">
+        <!-- Populated by main.js -->
+      </div>
+    </aside>
   </div>
-</section>
 
   <script type="module" src="main.js"></script>
 </body>

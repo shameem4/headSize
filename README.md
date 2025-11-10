@@ -62,24 +62,5 @@ Files of interest
 - `graphics.js` — main drawing helper. Search for `drawScreenLabel`,
 	`drawRailSegment`, `drawAngleGuide` to follow the label/rail logic.
 - `config.js` — tweak colors, offsets, and label behavior here.
-- `debug_out/` — sample processed data useful for offline testing.
 
-How to contribute or experiment
 
-- Modify `config.js` to adjust label offsets, colors, or default
-	`screenSpace` behavior.
-- Add or modify a small dataset in `debug_out/` and open `index.html` to
-	visualize changes.
-- If you want the original React/Vite app restored (this repo was trimmed),
-	mention it and the original source can be recovered from prior commits.
-
-Contact / next steps
-
-If you want I can:
-- Make all labels screen-space (upright) by default.
-- Add a small debug toggle that draws canvas vs screen points for visual
-	verification.
-- Convert this demo back to a small React app if you prefer a componentized
-	workflow.
-
-```

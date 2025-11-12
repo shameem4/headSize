@@ -78,183 +78,43 @@ npx http-server -c-1 . -p 5173
 # Open http://localhost:5173
 ```
 
-## 📖 Usage
+Developer notes — coordinate systems and labels
 
-1. **Grant camera permission** when prompted
-2. **Position your face** in the camera view
-3. **Select focus mode** using the radio buttons:
-   - **Global**: Shows all measurements
-   - **Face**: Highlights face width and IPD
-   - **Eyes**: Highlights eye and IPD measurements
-   - **Nose**: Highlights nose-specific metrics
-4. **Toggle mirror view** for comfortable selfie mode
-5. **View real-time metrics** in the right-side panel
+- Internally the project calculates geometry in canvas (logical) coordinates
+	— these are the coordinates derived from landmark data (e.g. normalized
+	landmark positions multiplied by canvas size).
+- Labels are drawn in screen space to stay upright and readable. A single
+	helper `drawScreenLabel(text, canvasPosition, opts)` converts a canvas
+	coordinate to screen coordinates and calls the low-level screen-space
+	drawing function. This keeps geometry calculations consistent and prevents
+	accidental mixing of coordinate spaces (the source of earlier label
+	rotation bugs).
+- Use the `screenSpace` flag on label objects to control whether the label is
+	upright (`true`) or visually rotated to match the geometry (`false`).
 
-## 🔧 Configuration
+Files of interest
 
-Edit [config.js](config.js) to customize:
+- `graphics.js` — main drawing helper. Search for `drawScreenLabel`,
+	`drawRailSegment`, `drawAngleGuide` to follow the label/rail logic.
+- `config.js` — tweak colors, offsets, and label behavior here.
+- `debug_out/` — sample processed data useful for offline testing.
 
-- **Camera settings**: Video resolution, iris diameter, focal length
-- **Colors**: Customize colors for each measurement type
-- **Overlay offsets**: Adjust label and rail positions
-- **Measurement indices**: MediaPipe landmark indices for features
+How to contribute or experiment
 
-Configuration is validated on startup with descriptive error messages.
+- Modify `config.js` to adjust label offsets, colors, or default
+	`screenSpace` behavior.
+- Add or modify a small dataset in `debug_out/` and open `index.html` to
+	visualize changes.
+- If you want the original React/Vite app restored (this repo was trimmed),
+	mention it and the original source can be recovered from prior commits.
 
-## 📚 Module Documentation
+Contact / next steps
 
-### Core Modules
+If you want I can:
+- Make all labels screen-space (upright) by default.
+- Add a small debug toggle that draws canvas vs screen points for visual
+	verification.
+- Convert this demo back to a small React app if you prefer a componentized
+	workflow.
 
-#### **UIManager** ([core/ui-manager.js](core/ui-manager.js))
-Manages all DOM interactions and UI rendering.
-- DOM element references
-- Canvas resizing and display
-- Metrics panel rendering
-- Event listener setup
-
-#### **StateManager** ([core/state-manager.js](core/state-manager.js))
-Manages application state and measurements.
-- Measurement state (IPD, face, eyes, nose)
-- Distance smoothing
-- State reset and updates
-
-#### **CameraManager** ([core/camera-manager.js](core/camera-manager.js))
-Handles camera operations.
-- Webcam initialization
-- Video stream management
-- Landmark mirroring
-
-#### **ModelManager** ([core/model-manager.js](core/model-manager.js))
-Manages MediaPipe models.
-- Model initialization
-- Frame processing
-- Detection results
-
-### Utility Modules
-
-#### **formatters.js** ([utils/formatters.js](utils/formatters.js))
-```javascript
-formatMm(v)      // Format millimeters: "12.5 mm"
-formatDeg(v)     // Format degrees: "45.2°"
-formatCm(v)      // Format centimeters: "25.3 cm"
-safeColor(hex)   // Safe color with fallback
 ```
-
-#### **geometry.js** ([utils/geometry.js](utils/geometry.js))
-```javascript
-minEnclosingCircle(points)          // Welzl's algorithm
-circleFromTwoPoints(p1, p2)         // Diameter circle
-circleFromThreePoints(p1, p2, p3)   // Circumcircle
-isPointInsideCircle(point, circle)  // Collision test
-```
-
-#### **collision-manager.js** ([utils/collision-manager.js](utils/collision-manager.js))
-```javascript
-class CollisionManager {
-  reset()                          // Clear collision boxes
-  wouldCollide(box)               // Test collision
-  register(box)                   // Register box
-  findNonCollidingPosition(...)   // Smart placement
-}
-```
-
-## 🎨 Coordinate Systems
-
-- **Canvas coordinates**: Logical coordinates for geometry calculations
-- **Screen space**: Physical pixel coordinates for rendering
-- **Normalized coordinates**: MediaPipe landmark format (0-1 range)
-
-The system automatically handles coordinate transformations and ensures labels remain upright and readable.
-
-## 🔬 Technical Details
-
-### Measurement Calculations
-
-- **IPD (Interpupillary Distance)**: Calculated from iris center points with near/far estimates
-- **Camera Distance**: Estimated using iris diameter (default 11.7mm) and focal length
-- **Nose Metrics**:
-  - Bridge width, pad width, pad height
-  - Pad angle (vertical alignment)
-  - Flare angle (nostril spread)
-- **Face Width**: Distance between face edge landmarks
-- **Eye Width**: Distance between eye corner landmarks
-
-### Rendering Pipeline
-
-1. **Model Processing**: MediaPipe detects face landmarks
-2. **Coordinate Transformation**: Landmarks converted to canvas space
-3. **Measurement Calculation**: Metrics computed from landmarks
-4. **Collision Detection**: Label positions optimized
-5. **Canvas Rendering**: Measurements drawn with overlays
-
-## 📊 Performance
-
-- **60 FPS** video processing
-- **Real-time** landmark detection
-- **Optimized** collision detection
-- **Smooth** distance estimation with exponential smoothing
-
-## 🧪 Development
-
-### Adding New Measurements
-
-1. Add landmark indices to [config.js](config.js)
-2. Create calculation function in [calculations.js](calculations.js)
-3. Update [state-manager.js](core/state-manager.js) to track new measurement
-4. Add rendering logic to [graphics.js](graphics.js)
-5. Update [ui-manager.js](core/ui-manager.js) metrics panel
-
-### Testing
-
-The modular architecture makes unit testing straightforward:
-
-```javascript
-import { formatMm } from './utils/formatters.js';
-import { StateManager } from './core/state-manager.js';
-
-// Test formatters
-console.assert(formatMm(12.5) === "12.5 mm");
-
-// Test state management
-const state = new StateManager(config);
-state.updateMeasurements(head, 11.7);
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Follow the existing module structure
-4. Add JSDoc documentation
-5. Submit a pull request
-
-## 📝 License
-
-This project is part of a larger facial measurement toolkit. See individual files for licensing information.
-
-## 🔗 Resources
-
-- [MediaPipe Face Landmarker](https://developers.google.com/mediapipe/solutions/vision/face_landmarker)
-- [Canvas API](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API)
-- [ES6 Modules](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules)
-
-## 📞 Support
-
-For questions or issues:
-1. Check [REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md) for architecture details
-2. Review module documentation above
-3. Open an issue for bugs or feature requests
-
-## 🎯 Future Enhancements
-
-- [ ] Unit test suite for all modules
-- [ ] TypeScript migration for type safety
-- [ ] Build system (Vite/Rollup) for production
-- [ ] Export measurements to CSV/JSON
-- [ ] Calibration system for custom iris diameters
-- [ ] Historical measurement tracking
-- [ ] Multiple face support
-
----
-
-**Note**: This application has been recently refactored from a 475-line monolithic script to a modular, maintainable architecture. See [REFACTORING_SUMMARY.md](REFACTORING_SUMMARY.md) for the complete transformation story.

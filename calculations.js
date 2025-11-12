@@ -1,4 +1,6 @@
-const EPSILON = 1e-3;
+import {
+  minEnclosingCircle,
+} from "./utils/geometry.js";
 
 function pixelsPerMillimeter(pixelLength, irisDiameterMm = 11.7) {
   return pixelLength > 0 ? pixelLength / irisDiameterMm : null;
@@ -329,75 +331,6 @@ function computeIrisMeasurement(
   };
 }
 
-function distanceBetweenPoints(a, b) {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return Math.hypot(dx, dy);
-}
-
-function circleFromTwoPoints(p1, p2) {
-  return {
-    center: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 },
-    radius: distanceBetweenPoints(p1, p2) / 2,
-  };
-}
-
-function circleFromThreePoints(p1, p2, p3) {
-  const d =
-    2 *
-    (p1.x * (p2.y - p3.y) +
-      p2.x * (p3.y - p1.y) +
-      p3.x * (p1.y - p2.y));
-  if (Math.abs(d) < EPSILON) return null;
-
-  const ux =
-    ((p1.x ** 2 + p1.y ** 2) * (p2.y - p3.y) +
-      (p2.x ** 2 + p2.y ** 2) * (p3.y - p1.y) +
-      (p3.x ** 2 + p3.y ** 2) * (p1.y - p2.y)) /
-    d;
-  const uy =
-    ((p1.x ** 2 + p1.y ** 2) * (p3.x - p2.x) +
-      (p2.x ** 2 + p2.y ** 2) * (p1.x - p3.x) +
-      (p3.x ** 2 + p3.y ** 2) * (p2.x - p1.x)) /
-    d;
-  const center = { x: ux, y: uy };
-  return {
-    center,
-    radius: distanceBetweenPoints(center, p1),
-  };
-}
-
-function isPointInsideCircle(point, circle) {
-  if (!circle) return false;
-  return distanceBetweenPoints(point, circle.center) <= circle.radius + EPSILON;
-}
-
-function minEnclosingCircle(points) {
-  if (!points?.length) return null;
-  let circle = null;
-
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    if (circle && isPointInsideCircle(p, circle)) continue;
-
-    circle = { center: { ...p }, radius: 0 };
-    for (let j = 0; j < i; j++) {
-      const q = points[j];
-      if (isPointInsideCircle(q, circle)) continue;
-
-      circle = circleFromTwoPoints(p, q);
-      for (let k = 0; k < j; k++) {
-        const r = points[k];
-        if (isPointInsideCircle(r, circle)) continue;
-
-        const candidate = circleFromThreePoints(p, q, r);
-        if (candidate) circle = candidate;
-      }
-    }
-  }
-  return circle;
-}
-
 export const ConversionUtils = {
   pixelsPerMillimeter,
   millimetersPerPixel,
@@ -421,8 +354,4 @@ export const MeasurementBuilders = {
   buildFaceWidthMeasurement,
   buildEyeWidthMeasurement,
   computeIrisMeasurement,
-};
-
-export const GeometryUtils = {
-  minEnclosingCircle,
 };

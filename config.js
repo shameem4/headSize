@@ -99,3 +99,41 @@ export const EYE_WIDTH_OVERLAY_CONFIG = {
   textAlign: "center",
   drawRail: true,
 };
+
+/**
+ * Validate configuration objects
+ * @throws {Error} If configuration is invalid
+ */
+export function validateConfig() {
+  // Validate CAMERA_CONFIG
+  if (!CAMERA_CONFIG.videoSize || typeof CAMERA_CONFIG.videoSize !== "object") {
+    throw new Error("CAMERA_CONFIG.videoSize must be an object");
+  }
+  if (CAMERA_CONFIG.videoSize.width <= 0 || CAMERA_CONFIG.videoSize.height <= 0) {
+    throw new Error("CAMERA_CONFIG.videoSize dimensions must be positive");
+  }
+  if (CAMERA_CONFIG.irisDiameterMm <= 0) {
+    throw new Error("CAMERA_CONFIG.irisDiameterMm must be positive");
+  }
+  if (typeof CAMERA_CONFIG.focalLengthScale !== "function") {
+    throw new Error("CAMERA_CONFIG.focalLengthScale must be a function");
+  }
+
+  // Validate HEAD_CONFIG
+  if (!HEAD_CONFIG.noseGridIndices || typeof HEAD_CONFIG.noseGridIndices !== "object") {
+    throw new Error("HEAD_CONFIG.noseGridIndices must be an object");
+  }
+  if (!HEAD_CONFIG.faceWidthIdx || !HEAD_CONFIG.faceWidthIdx.left || !HEAD_CONFIG.faceWidthIdx.right) {
+    throw new Error("HEAD_CONFIG.faceWidthIdx must have left and right properties");
+  }
+  if (!HEAD_CONFIG.iris || !HEAD_CONFIG.iris.left || !HEAD_CONFIG.iris.right) {
+    throw new Error("HEAD_CONFIG.iris must have left and right iris configurations");
+  }
+
+  // Validate COLOR_CONFIG
+  if (!COLOR_CONFIG || typeof COLOR_CONFIG !== "object") {
+    throw new Error("COLOR_CONFIG must be an object");
+  }
+
+  return true;
+}

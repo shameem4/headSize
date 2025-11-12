@@ -10,6 +10,7 @@ import {
   FACE_OVERLAY_CONFIG,
   EYE_WIDTH_OVERLAY_CONFIG,
 } from "./config.js";
+import { CollisionManager } from "./utils/collision-manager.js";
 
 /** @typedef {{x:number,y:number}} Point */
 
@@ -27,22 +28,6 @@ const DEFAULT_RENDER_POLICY = {
   },
 };
 
-// collision registry (cleared each frame)
-let _drawnBoxes = [];
-function _labelCollides(box) {
-  return _drawnBoxes.some(
-    (b) => !(box.x2 < b.x1 || box.x1 > b.x2 || box.y2 < b.y1 || box.y1 > b.y2)
-  );
-}
-function _measureBox(ctx, text, pos) {
-  const { width, height } = measureLabel(ctx, text);
-  return {
-    x1: pos.x - width / 2,
-    y1: pos.y - height / 2,
-    x2: pos.x + width / 2,
-    y2: pos.y + height / 2,
-  };
-}
 
 /** --- math & guards ------------------------------------------------------- */
 
@@ -133,7 +118,7 @@ function resolveOrientation(descriptor, baseDir /** Point */) {
 }
 
 /** Draw a rail offset from a base segment, optionally with a label. */
-function drawRailSegment(ctx, baseStart, baseEnd, options = {}) {
+function drawRailSegment(ctx, baseStart, baseEnd, options = {}, collisionMgr = null) {
   if (!isFinitePoint(baseStart) || !isFinitePoint(baseEnd)) return null;
   const color = options.color || "#fff";
   const lineWidth = options.lineWidth ?? 2;
@@ -188,9 +173,11 @@ function drawRailSegment(ctx, baseStart, baseEnd, options = {}) {
     ].filter(Boolean);
 
     let placed = null;
-    for (const p of candidates) {
-      const box = _measureBox(ctx, label.text, p);
-      if (!_labelCollides(box)) { _drawnBoxes.push(box); placed = p; break; }
+    if (collisionMgr) {
+      placed = collisionMgr.findNonCollidingPosition(ctx, label.text, candidates, label.font || "bold 18px sans-serif");
+    } else {
+      // Fallback: just use first candidate
+      placed = candidates[0];
     }
     if (placed) {
       drawLabelScreen(ctx, label.text, placed, {
@@ -282,7 +269,7 @@ function drawNoseGrid(
 
 /** --- nose overlays ------------------------------------------------------- */
 
-function drawPadHeightBracket(ctx, bridgeRow, padRow, value, color, policy) {
+function drawPadHeightBracket(ctx, bridgeRow, padRow, value, color, policy, collisionMgr) {
   if (!bridgeRow?.left || !padRow?.left || !Number.isFinite(value)) return;
   const leftBridge = bridgeRow.left;
   const leftPad = padRow.left;
@@ -312,10 +299,10 @@ function drawPadHeightBracket(ctx, bridgeRow, padRow, value, color, policy) {
         color,
       },
     },
-  });
+  }, collisionMgr);
 }
 
-function drawHorizontalBracket(ctx, row, label, value, color, placement = "top", policy) {
+function drawHorizontalBracket(ctx, row, label, value, color, placement = "top", policy, collisionMgr) {
   if (!row?.left || !row?.right || !Number.isFinite(value)) return;
   const dir = placement === "top" ? -1 : 1;
   const offsets = NOSE_OVERLAY_OFFSETS.horizontalBracket;
@@ -336,7 +323,7 @@ function drawHorizontalBracket(ctx, row, label, value, color, placement = "top",
       align: "center",
       alignToRail: true, // harmonized with IPD/Face width labels
     },
-  });
+  }, collisionMgr);
 }
 
 /** --- angle helpers ------------------------------------------------------- */
@@ -482,7 +469,7 @@ function drawFlareAngleGuide(ctx, padRow, value, color, policy) {
   );
 }
 
-function drawNoseOverlay(ctx, metrics, policy) {
+function drawNoseOverlay(ctx, metrics, policy, collisionMgr) {
   if (!metrics?.rows) return;
   const colors = COLOR_CONFIG.noseMetrics || {};
   const { bridge, pad } = metrics.rows;
@@ -495,7 +482,8 @@ function drawNoseOverlay(ctx, metrics, policy) {
       metrics.bridgeWidthMm,
       colors.bridge,
       "top",
-      policy
+      policy,
+      collisionMgr
     );
   }
   if (Number.isFinite(metrics.padSpanMm)) {
@@ -506,7 +494,8 @@ function drawNoseOverlay(ctx, metrics, policy) {
       metrics.padSpanMm,
       colors.padSpan,
       "top",
-      policy
+      policy,
+      collisionMgr
     );
   }
   if (Number.isFinite(metrics.padHeightMm)) {
@@ -516,7 +505,8 @@ function drawNoseOverlay(ctx, metrics, policy) {
       pad,
       metrics.padHeightMm,
       colors.padHeight,
-      policy
+      policy,
+      collisionMgr
     );
   }
   if (Number.isFinite(metrics.padAngleDeg) && metrics.padAngleLines) {
@@ -535,7 +525,7 @@ function drawNoseOverlay(ctx, metrics, policy) {
 
 /** --- other overlays ------------------------------------------------------ */
 
-function drawIpdMeasurement(ctx, ipd) {
+function drawIpdMeasurement(ctx, ipd, collisionMgr) {
   if (!ipd) return;
   const colors = COLOR_CONFIG.ipd || {};
   const textLift = IPD_OVERLAY_CONFIG.textLift ?? 18;
@@ -557,12 +547,12 @@ function drawIpdMeasurement(ctx, ipd) {
           align: textAlign || "center",
           alignToRail: true, // align along rail, but kept upright
         },
-      });
+      }, collisionMgr);
     }
   );
 }
 
-function drawFaceWidthMeasurement(ctx, faceData) {
+function drawFaceWidthMeasurement(ctx, faceData, collisionMgr) {
   if (!faceData) return;
   const color = COLOR_CONFIG.faceWidth || "#fff";
   const spanOffset = FACE_OVERLAY_CONFIG.spanOffset ?? 50;
@@ -579,7 +569,7 @@ function drawFaceWidthMeasurement(ctx, faceData) {
       color,
       alignToRail: true, // align label with rail but ensure upright rendering
     },
-  });
+  }, collisionMgr);
 }
 
 /** --- public entry -------------------------------------------------------- */
@@ -588,11 +578,12 @@ export function createGraphics(canvasElement, canvasCtx) {
   const ctx = canvasCtx;
   const canvas = canvasElement;
   const eyeWidthColors = COLOR_CONFIG.eyeWidths || {};
+  const collisionManager = new CollisionManager();
   let policy = { ...DEFAULT_RENDER_POLICY };
   let leadersUsed = 0;
 
   function beginFrame() {
-    _drawnBoxes = [];
+    collisionManager.reset();
     leadersUsed = 0;
   }
 
@@ -615,12 +606,12 @@ export function createGraphics(canvasElement, canvasCtx) {
 
     // FACE (always in minimal/standard/full)
     if (state?.faceWidth && (focus === "global" || focus === "face")) {
-      withAlpha(() => drawFaceWidthMeasurement(ctx, state.faceWidth), focus !== "face");
+      withAlpha(() => drawFaceWidthMeasurement(ctx, state.faceWidth, collisionManager), focus !== "face");
     }
 
     // IPD (always in minimal/standard/full)
     if (state?.ipd && (focus === "global" || focus === "eyes" || focus === "face")) {
-      withAlpha(() => drawIpdMeasurement(ctx, state.ipd), focus !== "eyes" && focus !== "face");
+      withAlpha(() => drawIpdMeasurement(ctx, state.ipd, collisionManager), focus !== "eyes" && focus !== "face");
     }
 
     // EYE WIDTHS (standard/full)
@@ -644,7 +635,7 @@ export function createGraphics(canvasElement, canvasCtx) {
               alignToRail: true,
               leader: (policy.maxLeaders > leadersUsed) ? { from: start, lineWidth: 1.1, color: eyeWidthColors.left } : undefined,
             },
-          }), focus !== "eyes");
+          }, collisionManager), focus !== "eyes");
           if (policy.maxLeaders > leadersUsed) leadersUsed++;
         }
       }
@@ -667,7 +658,7 @@ export function createGraphics(canvasElement, canvasCtx) {
               alignToRail: true,
               leader: (policy.maxLeaders > leadersUsed) ? { from: start, lineWidth: 1.1, color: eyeWidthColors.right } : undefined,
             },
-          }), focus !== "eyes");
+          }, collisionManager), focus !== "eyes");
           if (policy.maxLeaders > leadersUsed) leadersUsed++;
         }
       }
@@ -675,11 +666,11 @@ export function createGraphics(canvasElement, canvasCtx) {
 
     // NOSE (only if toggled; minimal shows rails only; standard/full add labels/angles)
     if (noseOverlayEnabled && (focus === "global" || focus === "nose")) {
-      withAlpha(() => drawNoseOverlay(ctx, state.nose, policy), focus !== "nose");
+      withAlpha(() => drawNoseOverlay(ctx, state.nose, policy, collisionManager), focus !== "nose");
     }
   }
 
-  function drawNoseOverlayPublic(metrics) { drawNoseOverlay(ctx, metrics, policy); }
+  function drawNoseOverlayPublic(metrics) { drawNoseOverlay(ctx, metrics, policy, collisionManager); }
   function drawNoseGridPublic(landmarks, noseIndices, color, options) {
     drawNoseGrid(ctx, canvas, landmarks, noseIndices, color, options);
   }

@@ -1,8 +1,58 @@
+/**
+ * Centralized Configuration for headSize Application
+ * @module config
+ *
+ * This file contains all configuration settings organized into logical sections.
+ * Modify values here to customize application behavior, appearance, and measurements.
+ */
+
+// ============================================================================
+// APPLICATION SETTINGS
+// ============================================================================
+
+/**
+ * Application-wide settings
+ */
+export const APP_CONFIG = {
+  name: "headSize",
+  version: "2.0.0",
+  debug: false, // Set to true to enable console logging
+};
+
+// ============================================================================
+// CAMERA & VIDEO SETTINGS
+// ============================================================================
+
+/**
+ * Camera and MediaPipe configuration
+ */
 export const CAMERA_CONFIG = {
+  // MediaPipe version
   mediaPipeVersion: "0.10.0",
   runningMode: "VIDEO",
-  videoSize: { width: 1280, height: 720 },
-  irisDiameterMm: 11.7,
+
+  // Video resolution
+  videoSize: {
+    width: 1280,
+    height: 720,
+  },
+
+  // Camera selection preferences
+  cameraPreferences: {
+    // Priority order for camera selection (regex patterns)
+    priorities: [
+      /front.*wide/i,      // "Front Wide" camera (iPhone, etc.)
+      /wide.*front/i,      // Alternative naming
+      /front/i,            // Any front camera
+      /user/i,             // User-facing camera
+    ],
+    facingMode: "user",    // Fallback: "user" (front) or "environment" (rear)
+  },
+
+  // Physical measurements
+  irisDiameterMm: 11.7,    // Average human iris diameter in millimeters
+
+  // Focal length calculation
   defaultNorm: { x: 0.8, y: 1.4 },
   focalLengthScale() {
     return {
@@ -10,75 +60,170 @@ export const CAMERA_CONFIG = {
       y: this.videoSize.height * this.defaultNorm.y,
     };
   },
-  distanceSmoothing: 0.18,
-  distanceVisibilityTimeout: 1200,
+
+  // Distance estimation
+  distanceSmoothing: 0.18,           // Exponential smoothing factor (0-1)
+  distanceVisibilityTimeout: 1200,   // Hide distance after ms of inactivity
 };
 
+// ============================================================================
+// MEDIAPIPE LANDMARKS & FACIAL FEATURE INDICES
+// ============================================================================
 
+/**
+ * MediaPipe Face Landmarker indices for facial features
+ * Reference: https://developers.google.com/mediapipe/solutions/vision/face_landmarker
+ */
 export const HEAD_CONFIG = {
+  // Nose grid for detailed nose measurements
   noseGridIndices: {
-      "topRow":[105, 66, 107, 9, 336, 296, 334],
-      "browRow":[52, 65, 55, 8, 285, 295, 282],
-      "bridgeRow":[190, 189, 193, 168, 417, 413, 414],
-      "padRow":[114, 188, 122, 6, 351, 412, 343],
-      "underpadRow":[217, 174, 196, 197, 419, 399, 437],
-      "flareRow1":[198, 236, 3, 195, 248, 456, 420],
-      "flareRow2":[131, 134, 51, 5, 281, 363, 360],
-      "tipRow":[115, 220, 45, 4, 275, 440, 344],
+    topRow: [105, 66, 107, 9, 336, 296, 334],
+    browRow: [52, 65, 55, 8, 285, 295, 282],
+    bridgeRow: [190, 189, 193, 168, 417, 413, 414],
+    padRow: [114, 188, 122, 6, 351, 412, 343],
+    underpadRow: [217, 174, 196, 197, 419, 399, 437],
+    flareRow1: [198, 236, 3, 195, 248, 456, 420],
+    flareRow2: [131, 134, 51, 5, 281, 363, 360],
+    tipRow: [115, 220, 45, 4, 275, 440, 344],
   },
+
+  // Face width measurement points
   faceWidthIdx: {
-    left: 127,
-    right: 356,
+    left: 127,   // Left edge of face
+    right: 356,  // Right edge of face
   },
+
+  // Eye width measurement points
   eyeWidthIdx: {
-    left: [35, 244],
-    right: [464, 265],
+    left: [35, 244],    // Left eye corners
+    right: [464, 265],  // Right eye corners
   },
+
+  // Iris and pupil landmarks for IPD and distance
   iris: {
     left: {
-      iris: [474, 475, 476, 477],
-      pupil: 473,
+      iris: [474, 475, 476, 477],  // Left iris boundary points
+      pupil: 473,                   // Left pupil center
     },
     right: {
-      iris: [469, 470, 471, 472],
-      pupil: 468,
+      iris: [469, 470, 471, 472],  // Right iris boundary points
+      pupil: 468,                   // Right pupil center
     },
   },
 };
 
+// ============================================================================
+// VISUAL STYLING & COLORS
+// ============================================================================
+
+/**
+ * Color scheme for measurement overlays
+ */
 export const COLOR_CONFIG = {
+  // Nose measurement colors
   noseMetrics: {
-    bridge: "#FF9F43",
-    padSpan: "#00FFC8",
-    padHeight: "#FFD166",
-    padAngle: "#4DA6FF",
-    flareAngle: "#FF6AD5",
+    bridge: "#FF9F43",      // Orange - bridge width
+    padSpan: "#00FFC8",     // Cyan - pad width
+    padHeight: "#FFD166",   // Yellow - pad height
+    padAngle: "#4DA6FF",    // Blue - pad angle
+    flareAngle: "#FF6AD5",  // Pink - flare angle
   },
+
+  // Eye measurement colors
   eyeWidths: {
-    left: "#ffffff",
-    right: "#ffffff",
+    left: "#FFFFFF",   // White - left eye
+    right: "#FFFFFF",  // White - right eye
   },
+
+  // IPD (Interpupillary Distance) colors
   ipd: {
-    near: "#FFFFFF",
-    far: "#A0FFE6",
+    near: "#FFFFFF",   // White - near IPD
+    far: "#A0FFE6",    // Light cyan - far IPD
   },
-  faceWidth: "#FFFFFF",
+
+  // Face measurement color
+  faceWidth: "#FFFFFF",  // White - face width
+
+  // UI element colors
+  ui: {
+    background: "rgba(0, 0, 0, 0.65)",
+    border: "rgba(255, 255, 255, 0.2)",
+    text: "#FFFFFF",
+    accent: "#00FFC8",
+  },
 };
 
-export const LABEL_FONT = "bold 18px 'Segoe UI', sans-serif";
+/**
+ * Typography settings
+ */
+export const TYPOGRAPHY = {
+  labelFont: "bold 18px 'Segoe UI', sans-serif",
+  titleFont: "600 16px 'Segoe UI', sans-serif",
+  bodyFont: "400 14px 'Segoe UI', sans-serif",
+};
 
+// Backward compatibility
+export const LABEL_FONT = TYPOGRAPHY.labelFont;
+
+// ============================================================================
+// OVERLAY & RENDERING SETTINGS
+// ============================================================================
+
+/**
+ * Nose overlay positioning and styling
+ */
+export const NOSE_OVERLAY_CONFIG = {
+  // Grid styling
+  grid: {
+    color: "#ffffff63",  // Semi-transparent white
+    lineWidth: 1.5,
+  },
+
+  // Bracket offsets
+  horizontalBracket: {
+    lineOffset: 8,
+    labelPadding: 6,
+  },
+
+  padHeight: {
+    horizontalInset: -100,
+    labelGap: -15,
+  },
+
+  // Angle overlays
+  padAngle: {
+    radius: 28,
+    arcWidth: 2,
+    armWidth: 2,
+    labelPad: 10,
+    leader: true,
+    leaderWidth: 1.25,
+  },
+
+  flareAngle: {
+    baseOffsetY: 12,
+    radius: 30,
+    arcWidth: 2,
+    armWidth: 2,
+    labelPad: 12,
+    leader: true,
+    leaderWidth: 1.25,
+  },
+};
+
+// Backward compatibility
 export const NOSE_OVERLAY_OFFSETS = {
-  horizontalBracket: { lineOffset: 8, labelPadding: 6 },
-  padHeight: { horizontalInset: -100, labelGap: -15 },
-  padAngle: { labelOffsetX: 18, labelOffsetY: 30 },
-  flareAngle: { baseOffsetY: 12, labelOffsetY: -20 },
+  horizontalBracket: NOSE_OVERLAY_CONFIG.horizontalBracket,
+  padHeight: NOSE_OVERLAY_CONFIG.padHeight,
+  padAngle: NOSE_OVERLAY_CONFIG.padAngle,
+  flareAngle: NOSE_OVERLAY_CONFIG.flareAngle,
 };
 
-export const NOSE_GRID_STYLE = {
-  color: "#ffffff63",
-  lineWidth: 1.5,
-};
+export const NOSE_GRID_STYLE = NOSE_OVERLAY_CONFIG.grid;
 
+/**
+ * IPD (Interpupillary Distance) overlay configuration
+ */
 export const IPD_OVERLAY_CONFIG = {
   textLift: 18,
   rails: [
@@ -87,12 +232,18 @@ export const IPD_OVERLAY_CONFIG = {
   ],
 };
 
+/**
+ * Face width overlay configuration
+ */
 export const FACE_OVERLAY_CONFIG = {
   label: "Face",
   spanOffset: 50,
   labelLift: 16,
 };
 
+/**
+ * Eye width overlay configuration
+ */
 export const EYE_WIDTH_OVERLAY_CONFIG = {
   railOffset: 120,
   textLift: -20,
@@ -101,39 +252,176 @@ export const EYE_WIDTH_OVERLAY_CONFIG = {
 };
 
 /**
- * Validate configuration objects
- * @throws {Error} If configuration is invalid
+ * Default render policy settings
+ */
+export const RENDER_POLICY = {
+  detailLevel: "standard",   // "minimal" | "standard" | "full"
+  focus: "face",             // "global" | "face" | "eyes" | "nose"
+  maxLeaders: 1,             // Maximum number of leader lines
+  minAngleDeg: 8,            // Minimum angle to display (reduces clutter)
+  compact: {
+    alphaSecondary: 0.55,    // Opacity for non-focused elements
+    shortenLabels: true,     // Use abbreviated labels
+    hideRailConnectors: true, // Hide rail connector lines
+    showAngleArms: false,    // Hide angle arm lines
+  },
+};
+
+// ============================================================================
+// UI CONFIGURATION
+// ============================================================================
+
+/**
+ * UI element configuration
+ */
+export const UI_CONFIG = {
+  // Mirror mode (selfie view)
+  mirrorEnabled: true,
+
+  // Nose overlay visibility
+  noseOverlayEnabled: false,
+
+  // Metrics panel
+  metricsPanel: {
+    enabled: true,
+    position: "right",  // "left" | "right"
+  },
+
+  // Video display
+  video: {
+    borderRadius: "24px",
+    maxWidth: "100vw",
+    maxHeight: "100vh",
+  },
+};
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+/**
+ * Validate all configuration objects
+ * @throws {Error} If any configuration is invalid
+ * @returns {boolean} True if all validations pass
  */
 export function validateConfig() {
+  const errors = [];
+
+  // Validate APP_CONFIG
+  if (!APP_CONFIG.name || typeof APP_CONFIG.name !== "string") {
+    errors.push("APP_CONFIG.name must be a non-empty string");
+  }
+  if (!APP_CONFIG.version || typeof APP_CONFIG.version !== "string") {
+    errors.push("APP_CONFIG.version must be a non-empty string");
+  }
+
   // Validate CAMERA_CONFIG
   if (!CAMERA_CONFIG.videoSize || typeof CAMERA_CONFIG.videoSize !== "object") {
-    throw new Error("CAMERA_CONFIG.videoSize must be an object");
+    errors.push("CAMERA_CONFIG.videoSize must be an object");
+  } else {
+    if (CAMERA_CONFIG.videoSize.width <= 0 || CAMERA_CONFIG.videoSize.height <= 0) {
+      errors.push("CAMERA_CONFIG.videoSize dimensions must be positive");
+    }
   }
-  if (CAMERA_CONFIG.videoSize.width <= 0 || CAMERA_CONFIG.videoSize.height <= 0) {
-    throw new Error("CAMERA_CONFIG.videoSize dimensions must be positive");
-  }
+
   if (CAMERA_CONFIG.irisDiameterMm <= 0) {
-    throw new Error("CAMERA_CONFIG.irisDiameterMm must be positive");
+    errors.push("CAMERA_CONFIG.irisDiameterMm must be positive");
   }
+
   if (typeof CAMERA_CONFIG.focalLengthScale !== "function") {
-    throw new Error("CAMERA_CONFIG.focalLengthScale must be a function");
+    errors.push("CAMERA_CONFIG.focalLengthScale must be a function");
+  }
+
+  if (CAMERA_CONFIG.distanceSmoothing < 0 || CAMERA_CONFIG.distanceSmoothing > 1) {
+    errors.push("CAMERA_CONFIG.distanceSmoothing must be between 0 and 1");
   }
 
   // Validate HEAD_CONFIG
   if (!HEAD_CONFIG.noseGridIndices || typeof HEAD_CONFIG.noseGridIndices !== "object") {
-    throw new Error("HEAD_CONFIG.noseGridIndices must be an object");
+    errors.push("HEAD_CONFIG.noseGridIndices must be an object");
   }
-  if (!HEAD_CONFIG.faceWidthIdx || !HEAD_CONFIG.faceWidthIdx.left || !HEAD_CONFIG.faceWidthIdx.right) {
-    throw new Error("HEAD_CONFIG.faceWidthIdx must have left and right properties");
+
+  if (!HEAD_CONFIG.faceWidthIdx ||
+      typeof HEAD_CONFIG.faceWidthIdx.left !== "number" ||
+      typeof HEAD_CONFIG.faceWidthIdx.right !== "number") {
+    errors.push("HEAD_CONFIG.faceWidthIdx must have numeric left and right properties");
   }
+
   if (!HEAD_CONFIG.iris || !HEAD_CONFIG.iris.left || !HEAD_CONFIG.iris.right) {
-    throw new Error("HEAD_CONFIG.iris must have left and right iris configurations");
+    errors.push("HEAD_CONFIG.iris must have left and right iris configurations");
   }
 
   // Validate COLOR_CONFIG
   if (!COLOR_CONFIG || typeof COLOR_CONFIG !== "object") {
-    throw new Error("COLOR_CONFIG must be an object");
+    errors.push("COLOR_CONFIG must be an object");
+  }
+
+  // Validate RENDER_POLICY
+  const validDetailLevels = ["minimal", "standard", "full"];
+  if (!validDetailLevels.includes(RENDER_POLICY.detailLevel)) {
+    errors.push(`RENDER_POLICY.detailLevel must be one of: ${validDetailLevels.join(", ")}`);
+  }
+
+  const validFocusModes = ["global", "face", "eyes", "nose"];
+  if (!validFocusModes.includes(RENDER_POLICY.focus)) {
+    errors.push(`RENDER_POLICY.focus must be one of: ${validFocusModes.join(", ")}`);
+  }
+
+  // Throw combined error if any validations failed
+  if (errors.length > 0) {
+    throw new Error(`Configuration validation failed:\n- ${errors.join("\n- ")}`);
   }
 
   return true;
+}
+
+/**
+ * Get a configuration value by path (e.g., "CAMERA_CONFIG.videoSize.width")
+ * @param {string} path - Dot-separated path to configuration value
+ * @returns {*} Configuration value or undefined if not found
+ */
+export function getConfig(path) {
+  const parts = path.split(".");
+  let current = {
+    APP_CONFIG,
+    CAMERA_CONFIG,
+    HEAD_CONFIG,
+    COLOR_CONFIG,
+    TYPOGRAPHY,
+    NOSE_OVERLAY_CONFIG,
+    IPD_OVERLAY_CONFIG,
+    FACE_OVERLAY_CONFIG,
+    EYE_WIDTH_OVERLAY_CONFIG,
+    RENDER_POLICY,
+    UI_CONFIG,
+  };
+
+  for (const part of parts) {
+    if (current[part] === undefined) return undefined;
+    current = current[part];
+  }
+
+  return current;
+}
+
+/**
+ * Export all configuration as a single object for debugging
+ */
+export const ALL_CONFIG = {
+  APP_CONFIG,
+  CAMERA_CONFIG,
+  HEAD_CONFIG,
+  COLOR_CONFIG,
+  TYPOGRAPHY,
+  NOSE_OVERLAY_CONFIG,
+  IPD_OVERLAY_CONFIG,
+  FACE_OVERLAY_CONFIG,
+  EYE_WIDTH_OVERLAY_CONFIG,
+  RENDER_POLICY,
+  UI_CONFIG,
+};
+
+// Log configuration in debug mode
+if (APP_CONFIG.debug) {
+  console.log("Configuration loaded:", ALL_CONFIG);
 }

@@ -20,6 +20,68 @@ import { LABEL_FONT } from "../config.js";
 /** @typedef {{x: number, y: number}} Point */
 
 // ============================================================================
+// MEASUREMENT BOX DRAWING
+// ============================================================================
+
+/**
+ * Draw a measurement box with background and text
+ * Similar to the reference image style with colored boxes
+ *
+ * @param {CanvasRenderingContext2D} ctx - Canvas context
+ * @param {string} text - Measurement text
+ * @param {Point} position - Box position (center)
+ * @param {Object} opts - Drawing options
+ * @param {string} [opts.color="#fff"] - Text and border color
+ * @param {string} [opts.backgroundColor="rgba(0,0,0,0.7)"] - Box background
+ * @param {number} [opts.padding=6] - Box padding
+ * @param {number} [opts.borderRadius=4] - Corner radius
+ * @param {number} [opts.fontSize=14] - Font size in pixels
+ */
+export function drawMeasurementBox(ctx, text, position, opts = {}) {
+  if (!text || !isFinitePoint(position)) return;
+
+  const color = opts.color || "#fff";
+  const bgColor = opts.backgroundColor || "rgba(0, 0, 0, 0.7)";
+  const padding = opts.padding ?? 6;
+  const borderRadius = opts.borderRadius ?? 4;
+  const fontSize = opts.fontSize ?? 14;
+  const font = `bold ${fontSize}px 'Segoe UI', sans-serif`;
+
+  ctx.save();
+  ctx.font = font;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  // Measure text
+  const metrics = ctx.measureText(text);
+  const textWidth = metrics.width;
+  const textHeight = fontSize;
+
+  // Box dimensions
+  const boxWidth = textWidth + padding * 2;
+  const boxHeight = textHeight + padding * 2;
+  const x = position.x - boxWidth / 2;
+  const y = position.y - boxHeight / 2;
+
+  // Draw background box with rounded corners
+  ctx.fillStyle = bgColor;
+  ctx.beginPath();
+  ctx.roundRect(x, y, boxWidth, boxHeight, borderRadius);
+  ctx.fill();
+
+  // Draw border
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Draw text
+  ctx.fillStyle = color;
+  ctx.fillText(text, position.x, position.y);
+
+  ctx.restore();
+}
+
+// ============================================================================
 // LABEL DRAWING
 // ============================================================================
 

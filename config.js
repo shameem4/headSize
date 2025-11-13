@@ -285,6 +285,9 @@ export const UI_CONFIG = {
   // Nose overlay visibility
   noseOverlayEnabled: true,
 
+  // Rendering mode
+  renderMode: "canvas2d",  // "canvas2d" | "threejs" | "hybrid"
+
   // Metrics panel
   metricsPanel: {
     enabled: true,
@@ -296,6 +299,105 @@ export const UI_CONFIG = {
     borderRadius: "24px",
     maxWidth: "100vw",
     maxHeight: "100vh",
+  },
+};
+
+/**
+ * Three.js 3D visualization configuration
+ */
+export const THREEJS_CONFIG = {
+  // Enable 3D visualization
+  enabled: true,
+
+  // 3D head model
+  headModel: {
+    enabled: true,
+    opacity: 0.85,
+    wireframe: false,
+    color: 0x88ccff,
+    emissive: 0x223344,
+    emissiveIntensity: 0.2,
+    shininess: 30,
+  },
+
+  // Landmark visualization
+  landmarks: {
+    enabled: true,
+    size: 2.5,
+    color: 0xffffff,
+    opacity: 0.8,
+  },
+
+  // Camera controls
+  camera: {
+    fov: 45,
+    near: 0.1,
+    far: 2000,
+    position: { x: 0, y: 0, z: 500 },
+    controls: {
+      enabled: true,
+      enableDamping: true,
+      dampingFactor: 0.05,
+      rotateSpeed: 0.5,
+      zoomSpeed: 1.2,
+      panSpeed: 0.8,
+      minDistance: 100,
+      maxDistance: 1000,
+    },
+  },
+
+  // Lighting
+  lights: {
+    ambient: {
+      enabled: true,
+      color: 0xffffff,
+      intensity: 0.6,
+    },
+    directional: {
+      enabled: true,
+      color: 0xffffff,
+      intensity: 0.8,
+      position: { x: 100, y: 100, z: 100 },
+    },
+    point: {
+      enabled: true,
+      color: 0xffffff,
+      intensity: 0.5,
+      position: { x: -100, y: -100, z: 100 },
+    },
+  },
+
+  // Scene
+  scene: {
+    background: 0x1a1a1a,
+    fog: {
+      enabled: false,
+      color: 0x1a1a1a,
+      near: 500,
+      far: 1500,
+    },
+  },
+
+  // Grid helper
+  grid: {
+    enabled: true,
+    size: 500,
+    divisions: 20,
+    colorCenterLine: 0x444444,
+    colorGrid: 0x222222,
+  },
+
+  // Axes helper
+  axes: {
+    enabled: true,
+    size: 100,
+  },
+
+  // Measurement overlays in 3D
+  measurements3D: {
+    enabled: true,
+    scale: 1.0,
+    depthTest: false,  // Always visible on top
   },
 };
 
@@ -398,6 +500,7 @@ export function getConfig(path) {
     EYE_WIDTH_OVERLAY_CONFIG,
     RENDER_POLICY,
     UI_CONFIG,
+    THREEJS_CONFIG,
   };
 
   for (const part of parts) {
@@ -423,6 +526,7 @@ export const ALL_CONFIG = {
   EYE_WIDTH_OVERLAY_CONFIG,
   RENDER_POLICY,
   UI_CONFIG,
+  THREEJS_CONFIG,
 };
 
 // Log configuration in debug mode

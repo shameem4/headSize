@@ -16,6 +16,7 @@
         <div class="video-shell">
           <video id="webcam" autoplay playsinline></video>
           <canvas class="output_canvas" id="output_canvas" width="1280" height="720" style="position:absolute;left:0;top:0;"></canvas>
+          <canvas class="output_canvas_3d" id="output_canvas_3d" width="1280" height="720" style="position:absolute;left:0;top:0;display:none;"></canvas>
           <!-- (Old in-canvas overlays removed) -->
         </div>
       </div>
@@ -57,6 +58,31 @@
               <label><input type="radio" name="focus" value="nose"> Nose</label>
             </div>
           </fieldset>
+
+          <fieldset class="control-group">
+            <legend class="control-label">View Mode</legend>
+            <div class="radio-options">
+              <label><input type="radio" name="renderMode" value="canvas2d" checked> 2D Overlay</label>
+              <label><input type="radio" name="renderMode" value="threejs"> 3D Model</label>
+              <label><input type="radio" name="renderMode" value="hybrid"> Hybrid</label>
+            </div>
+          </fieldset>
+
+          <div class="control-group" id="threejs_controls" style="display:none;">
+            <label class="control toggle">
+              <input type="checkbox" id="wireframe_toggle" />
+              <span>Wireframe</span>
+            </label>
+            <label class="control toggle">
+              <input type="checkbox" id="landmarks_toggle" checked />
+              <span>Landmarks</span>
+            </label>
+            <label class="control">
+              <span class="control-label">Opacity</span>
+              <input type="range" id="opacity_slider" min="0" max="100" value="85" />
+            </label>
+            <button id="reset_camera_btn" class="control-button">Reset Camera</button>
+          </div>
 
         </div>
       

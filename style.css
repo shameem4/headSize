@@ -383,8 +383,49 @@ body {
 }
 
 /* Canvas should overlay the video perfectly */
-#output_canvas {
+#output_canvas,
+#output_canvas_3d {
   position: absolute;
   left: 0;
   top: 0;
+}
+
+/* 3D canvas specific styles */
+#output_canvas_3d {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+#output_canvas_3d:active {
+  cursor: grabbing;
+}
+
+/* 3D Controls */
+.control-button {
+  padding: 8px 16px;
+  background: rgba(0, 255, 200, 0.1);
+  border: 1px solid rgba(0, 255, 200, 0.3);
+  border-radius: 8px;
+  color: #00ffc8;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.control-button:hover {
+  background: rgba(0, 255, 200, 0.2);
+  border-color: rgba(0, 255, 200, 0.5);
+}
+
+.control-button:active {
+  transform: scale(0.98);
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: #00ffc8;
+  cursor: pointer;
 }

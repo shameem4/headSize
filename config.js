@@ -279,7 +279,7 @@ export const UI_CONFIG = {
   mirrorEnabled: true,
 
   // Nose overlay visibility
-  noseOverlayEnabled: false,
+  noseOverlayEnabled: true,
 
   // Metrics panel
   metricsPanel: {

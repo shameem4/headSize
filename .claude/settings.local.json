@@ -3,7 +3,8 @@
     "allow": [
       "Bash(dir)",
       "Bash(dir:*)",
-      "Bash(NUL)"
+      "Bash(NUL)",
+      "Bash(curl -s http://localhost:5173)"
     ],
     "deny": [],
     "ask": []

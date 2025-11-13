@@ -4,7 +4,7 @@
  */
 
 import { ConversionUtils } from "./calculations.js";
-import { CAMERA_CONFIG, HEAD_CONFIG, validateConfig } from "./config.js";
+import { CAMERA_CONFIG, HEAD_CONFIG, UI_CONFIG, validateConfig } from "./config.js";
 import { createHeadTracker } from "./head.js";
 import { UIManager } from "./core/ui-manager.js";
 import { StateManager } from "./core/state-manager.js";
@@ -96,7 +96,9 @@ async function renderFrame() {
 
   // Draw measurement overlays on canvas
   ui.graphics.beginFrame();
-  ui.graphics.drawMeasurementOverlays(state.getMeasurements(), { noseOverlayEnabled: true });
+  ui.graphics.drawMeasurementOverlays(state.getMeasurements(), {
+    noseOverlayEnabled: UI_CONFIG.noseOverlayEnabled
+  });
 
   // Request next frame
   window.requestAnimationFrame(renderFrame);
@@ -123,7 +125,10 @@ let models;
     document.querySelector('input[name="focus"]:checked')?.value || "face";
   ui.graphics.setRenderPolicy({ focus: initialFocus });
 
-  ui.applyMirrorSetting(camera.isMirrorEnabled());
+  // Set initial mirror state from config
+  const initialMirrorEnabled = UI_CONFIG.mirrorEnabled;
+  camera.setMirrorEnabled(initialMirrorEnabled);
+  ui.applyMirrorSetting(initialMirrorEnabled);
 
   await camera.initialize();
   ui.video.addEventListener(

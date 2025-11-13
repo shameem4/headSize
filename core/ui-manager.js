@@ -5,7 +5,7 @@
 
 import { createGraphics } from "../graphics.js";
 import { formatMm, formatDeg, formatCm, safeColor } from "../utils/formatters.js";
-import { COLOR_CONFIG, IPD_OVERLAY_CONFIG } from "../config.js";
+import { COLOR_CONFIG, IPD_OVERLAY_CONFIG, UI_CONFIG } from "../config.js";
 
 /**
  * Manages UI elements, DOM references, and metrics panel rendering

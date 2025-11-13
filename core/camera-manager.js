@@ -20,6 +20,7 @@ export class CameraManager {
 
   /**
    * Find the best front-facing camera (prioritizes wide-angle front cameras)
+   * Uses camera priorities from centralized config
    * @returns {Promise<string|null>} Device ID of preferred camera or null
    */
   async findBestFrontCamera() {
@@ -29,8 +30,8 @@ export class CameraManager {
 
       if (videoDevices.length === 0) return null;
 
-      // Priority order for camera selection
-      const priorities = [
+      // Get priority order from config
+      const priorities = this.config.cameraPreferences?.priorities || [
         /front.*wide/i,      // "Front Wide" camera (iPhone, etc.)
         /wide.*front/i,      // Alternative naming
         /front/i,            // Any front camera
@@ -63,6 +64,9 @@ export class CameraManager {
     // Try to find the best front-facing camera
     const deviceId = await this.findBestFrontCamera();
 
+    // Get facingMode from config or default to "user"
+    const facingMode = this.config.cameraPreferences?.facingMode || "user";
+
     const constraints = {
       audio: false,
       video: deviceId
@@ -75,7 +79,7 @@ export class CameraManager {
         : {
             width: this.config.videoSize.width,
             height: this.config.videoSize.height,
-            facingMode: "user", // Changed from "environment" to "user" for front camera
+            facingMode: facingMode,
             resizeMode: "none",
           },
     };

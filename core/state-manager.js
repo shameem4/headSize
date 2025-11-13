@@ -21,13 +21,18 @@ const {
  */
 
 /**
- * Manages the application's measurement state
+ * Manages the application's measurement state with stabilization
  */
 export class StateManager {
   constructor(config) {
     this.config = config;
     this.smoothedDistance = null;
     this.lastDistanceUpdate = 0;
+
+    // Iris diameter smoothing for stable measurements (configurable)
+    this.smoothedIrisDiameterPx = null;
+    this.smoothingFactor = config.irisSmoothing ?? 0.15;
+    this.stabilizationThreshold = config.irisStabilizationThreshold ?? 0.5;
 
     /** @type {MeasurementState} */
     this.measurements = {
@@ -46,10 +51,37 @@ export class StateManager {
     this.measurements.faceWidth = null;
     this.measurements.eyes = { left: null, right: null };
     this.measurements.nose = null;
+    // Don't reset smoothed iris diameter - maintain stability across brief interruptions
   }
 
   /**
-   * Update measurements from head tracking data
+   * Smooth iris diameter with exponential smoothing and stabilization threshold
+   * @param {number} rawDiameterPx - Raw iris diameter in pixels
+   * @returns {number} Smoothed iris diameter
+   */
+  smoothIrisDiameter(rawDiameterPx) {
+    // Initialize on first call
+    if (this.smoothedIrisDiameterPx === null) {
+      this.smoothedIrisDiameterPx = rawDiameterPx;
+      return rawDiameterPx;
+    }
+
+    // Calculate difference
+    const diff = Math.abs(rawDiameterPx - this.smoothedIrisDiameterPx);
+
+    // Ignore tiny changes (stabilization threshold)
+    if (diff < this.stabilizationThreshold) {
+      return this.smoothedIrisDiameterPx; // No change
+    }
+
+    // Apply exponential smoothing for larger changes
+    this.smoothedIrisDiameterPx += (rawDiameterPx - this.smoothedIrisDiameterPx) * this.smoothingFactor;
+
+    return this.smoothedIrisDiameterPx;
+  }
+
+  /**
+   * Update measurements from head tracking data with iris diameter stabilization
    * @param {Object} head - Head tracker instance
    * @param {number} irisDiameterMm - Expected iris diameter in mm
    */
@@ -62,13 +94,18 @@ export class StateManager {
       return;
     }
 
-    const avgDiameterPx = (rightIris.diameterPx + leftIris.diameterPx) / 2;
-    if (!Number.isFinite(avgDiameterPx) || avgDiameterPx <= 0) {
+    // Calculate raw average iris diameter
+    const rawAvgDiameterPx = (rightIris.diameterPx + leftIris.diameterPx) / 2;
+    if (!Number.isFinite(rawAvgDiameterPx) || rawAvgDiameterPx <= 0) {
       this.reset();
       return;
     }
 
-    const mmPerPx = irisDiameterMm / avgDiameterPx;
+    // Apply smoothing to reduce jitter
+    const smoothedDiameterPx = this.smoothIrisDiameter(rawAvgDiameterPx);
+
+    // Calculate mmPerPx using smoothed diameter for stable measurements
+    const mmPerPx = irisDiameterMm / smoothedDiameterPx;
 
     this.measurements.ipd = buildIpdMeasurement(leftIris, rightIris, mmPerPx);
     this.measurements.faceWidth = buildFaceWidthMeasurement(head.face.widthPoints, mmPerPx);

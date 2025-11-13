@@ -66,8 +66,8 @@ export const CAMERA_CONFIG = {
   distanceVisibilityTimeout: 1200,   // Hide distance after ms of inactivity
 
   // Iris measurement stabilization (reduces jitter in measurements)
-  irisSmoothing: 0.15,               // Exponential smoothing for iris diameter (0.1-0.3 recommended)
-  irisStabilizationThreshold: 0.5,   // Ignore changes smaller than this many pixels
+  irisSmoothing: 0.3,               // Exponential smoothing for iris diameter (0.1-0.3 recommended)
+  irisStabilizationThreshold: 1,   // Ignore changes smaller than this many pixels
 };
 
 // ============================================================================

@@ -16,7 +16,6 @@ import {
   drawRailSegment,
   drawSmoothCurve,
   measureLabel,
-  drawMeasurementBox,
 } from "../utils/drawing-primitives.js";
 import { drawAngleOverlay } from "../utils/angle-rendering.js";
 import {
@@ -307,11 +306,22 @@ function drawBridgeWidthBox(ctx, bridgeRow, value, color) {
   const midX = (bridgeRow.left.x + bridgeRow.right.x) / 2;
   const midY = bridgeRow.midY - 25; // Above bridge
 
-  drawMeasurementBox(ctx, `Bridge width ${value.toFixed(1)}mm`, { x: midX, y: midY }, {
-    color,
-    backgroundColor: `${color}33`, // 20% opacity
-    fontSize: 13,
-  });
+  // Calculate head tilt angle from bridge row
+  const angle = Math.atan2(
+    bridgeRow.right.y - bridgeRow.left.y,
+    bridgeRow.right.x - bridgeRow.left.x
+  );
+
+  // Draw text with rotation matching head orientation
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.font = "bold 13px 'Segoe UI', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(midX, midY);
+  ctx.rotate(angle);
+  ctx.fillText(`Bridge width ${value.toFixed(1)}mm`, 0, 0);
+  ctx.restore();
 
   // Draw simple bracket
   ctx.save();
@@ -335,11 +345,22 @@ function drawPadWidthBox(ctx, padRow, value, color) {
   const midX = (padRow.left.x + padRow.right.x) / 2;
   const midY = padRow.midY + 35; // Below pad
 
-  drawMeasurementBox(ctx, `Pad width ${value.toFixed(1)}mm`, { x: midX, y: midY }, {
-    color,
-    backgroundColor: `${color}33`,
-    fontSize: 13,
-  });
+  // Calculate head tilt angle from pad row
+  const angle = Math.atan2(
+    padRow.right.y - padRow.left.y,
+    padRow.right.x - padRow.left.x
+  );
+
+  // Draw text with rotation matching head orientation
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.font = "bold 13px 'Segoe UI', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(midX, midY);
+  ctx.rotate(angle);
+  ctx.fillText(`Pad width ${value.toFixed(1)}mm`, 0, 0);
+  ctx.restore();
 
   // Draw simple bracket
   ctx.save();
@@ -363,11 +384,24 @@ function drawPadHeightBox(ctx, bridgeRow, padRow, value, color) {
   const x = Math.min(bridgeRow.left.x, padRow.left.x) - 50;
   const midY = (bridgeRow.midY + padRow.midY) / 2;
 
-  drawMeasurementBox(ctx, `Pad Height ${value.toFixed(1)}mm`, { x, y: midY }, {
-    color,
-    backgroundColor: `${color}33`,
-    fontSize: 13,
-  });
+  // Calculate vertical angle (perpendicular to head tilt)
+  const bridgeAngle = Math.atan2(
+    bridgeRow.right.y - bridgeRow.left.y,
+    bridgeRow.right.x - bridgeRow.left.x
+  );
+  // Rotate 90 degrees for vertical text
+  const verticalAngle = bridgeAngle + Math.PI / 2;
+
+  // Draw text with rotation matching head orientation
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.font = "bold 13px 'Segoe UI', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(x, midY);
+  ctx.rotate(verticalAngle);
+  ctx.fillText(`Pad Height ${value.toFixed(1)}mm`, 0, 0);
+  ctx.restore();
 
   // Draw vertical bracket
   ctx.save();
@@ -411,11 +445,16 @@ function drawPadAngleBox(ctx, lines, value, color) {
     y: origin.y + Math.sin(bisector) * labelDist,
   };
 
-  drawMeasurementBox(ctx, `Pad Angle ${value.toFixed(1)}°`, labelPos, {
-    color,
-    backgroundColor: `${color}33`,
-    fontSize: 12,
-  });
+  // Draw text with rotation matching bisector angle
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.font = "bold 12px 'Segoe UI', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(labelPos.x, labelPos.y);
+  ctx.rotate(bisector);
+  ctx.fillText(`Pad Angle ${value.toFixed(1)}°`, 0, 0);
+  ctx.restore();
 }
 
 /**
@@ -441,12 +480,22 @@ function drawFlareAngleBox(ctx, padRow, value, color) {
   ctx.stroke();
   ctx.restore();
 
-  // Label below arc
-  drawMeasurementBox(ctx, `Flare Angle ${value.toFixed(1)}°`, { x: centerX, y: baseY + 35 }, {
-    color,
-    backgroundColor: `${color}33`,
-    fontSize: 12,
-  });
+  // Calculate angle from pad row for text rotation
+  const padAngle = Math.atan2(
+    padRow.right.y - padRow.left.y,
+    padRow.right.x - padRow.left.x
+  );
+
+  // Draw text with rotation matching head orientation
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.font = "bold 12px 'Segoe UI', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.translate(centerX, baseY + 35);
+  ctx.rotate(padAngle);
+  ctx.fillText(`Flare Angle ${value.toFixed(1)}°`, 0, 0);
+  ctx.restore();
 }
 
 // ============================================================================

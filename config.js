@@ -328,21 +328,21 @@ export const THREEJS_CONFIG = {
     opacity: 0.8,
   },
 
-  // Camera controls
+  // Camera controls (not used in overlay mode)
   camera: {
     fov: 45,
     near: 0.1,
-    far: 2000,
-    position: { x: 0, y: 0, z: 500 },
+    far: 5000,
+    position: { x: 0, y: 0, z: 1000 },
     controls: {
-      enabled: true,
+      enabled: false, // Disabled - mesh follows face motion automatically
       enableDamping: true,
       dampingFactor: 0.05,
       rotateSpeed: 0.5,
       zoomSpeed: 1.2,
       panSpeed: 0.8,
-      minDistance: 100,
-      maxDistance: 1000,
+      minDistance: 400,
+      maxDistance: 2500,
     },
   },
 
@@ -369,7 +369,7 @@ export const THREEJS_CONFIG = {
 
   // Scene
   scene: {
-    background: 0x1a1a1a,
+    background: null, // Transparent - show video through 3D mesh
     fog: {
       enabled: false,
       color: 0x1a1a1a,
@@ -378,18 +378,18 @@ export const THREEJS_CONFIG = {
     },
   },
 
-  // Grid helper
+  // Grid helper (disabled for overlay mode)
   grid: {
-    enabled: true,
+    enabled: false,
     size: 500,
     divisions: 20,
     colorCenterLine: 0x444444,
     colorGrid: 0x222222,
   },
 
-  // Axes helper
+  // Axes helper (disabled for overlay mode)
   axes: {
-    enabled: true,
+    enabled: false,
     size: 100,
   },
 

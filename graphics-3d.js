@@ -13,43 +13,12 @@
  */
 
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { THREEJS_CONFIG, COLOR_CONFIG } from './config.js';
+import { FACE_MESH_TRIANGLES } from './face-mesh-triangles.js';
 
 // ============================================================================
 // LANDMARK MESH GENERATION
 // ============================================================================
-
-/**
- * MediaPipe face mesh triangulation indices
- * Defines which landmarks connect to form triangles
- */
-const FACE_MESH_TRIANGLES = [
-  // Forehead and upper face
-  [10, 338, 297], [297, 338, 332], [332, 338, 333], [333, 338, 334],
-  [334, 338, 296], [296, 338, 336], [336, 338, 9], [9, 338, 107],
-  [107, 338, 66], [66, 338, 105], [105, 338, 63], [63, 338, 70],
-
-  // Nose region
-  [168, 6, 197], [197, 195, 5], [5, 4, 1], [1, 19, 94],
-  [94, 2, 164], [164, 0, 11], [11, 12, 13], [13, 14, 15],
-
-  // Eye regions
-  [33, 246, 161], [161, 160, 159], [159, 158, 157], [157, 173, 133],
-  [263, 466, 388], [388, 387, 386], [386, 385, 384], [384, 398, 362],
-
-  // Mouth region
-  [61, 185, 40], [40, 39, 37], [37, 0, 267], [267, 269, 270],
-  [270, 409, 291], [291, 375, 321], [321, 405, 314], [314, 17, 84],
-
-  // Cheeks and jaw
-  [127, 162, 21], [21, 54, 103], [103, 67, 109], [109, 10, 338],
-  [356, 389, 251], [251, 284, 332], [332, 297, 338], [338, 10, 109],
-
-  // Additional face structure
-  [234, 93, 132], [132, 58, 172], [172, 136, 150], [150, 149, 176],
-  [454, 323, 361], [361, 288, 397], [397, 365, 379], [379, 378, 400],
-];
 
 /**
  * Create a 3D head mesh from MediaPipe face landmarks
@@ -63,14 +32,14 @@ function createHeadMesh(landmarks, canvasWidth, canvasHeight) {
 
   // Convert normalized landmarks to 3D positions
   const positions = [];
-  const scale = 300; // Scale factor for visibility
 
+  // Map directly to canvas pixel coordinates for overlay
+  // MediaPipe: x(0-1) left-to-right, y(0-1) top-to-bottom, z(depth around 0)
+  // Three.js: match canvas coordinates exactly
   for (const landmark of landmarks) {
-    // MediaPipe coordinates: x (horizontal), y (vertical), z (depth)
-    // Convert to Three.js coordinates: x (horizontal), y (vertical), z (depth)
-    const x = (landmark.x - 0.5) * scale;
-    const y = -(landmark.y - 0.5) * scale; // Invert Y for Three.js
-    const z = landmark.z * scale;
+    const x = landmark.x * canvasWidth;
+    const y = landmark.y * canvasHeight;
+    const z = -landmark.z * canvasWidth; // Negative Z so face points toward camera, scale by width for consistent depth
 
     positions.push(x, y, z);
   }
@@ -106,15 +75,15 @@ function createHeadMesh(landmarks, canvasWidth, canvasHeight) {
  * @param {Array} landmarks - MediaPipe normalized face landmarks
  * @returns {THREE.Points} Landmark points object
  */
-function createLandmarkPoints(landmarks) {
+function createLandmarkPoints(landmarks, canvasWidth, canvasHeight) {
   const geometry = new THREE.BufferGeometry();
   const positions = [];
-  const scale = 300;
 
+  // Use same coordinate mapping as mesh
   for (const landmark of landmarks) {
-    const x = (landmark.x - 0.5) * scale;
-    const y = -(landmark.y - 0.5) * scale;
-    const z = landmark.z * scale;
+    const x = landmark.x * canvasWidth;
+    const y = landmark.y * canvasHeight;
+    const z = -landmark.z * canvasWidth;
     positions.push(x, y, z);
   }
 
@@ -144,11 +113,16 @@ function createLandmarkPoints(landmarks) {
 export function createGraphics3D(canvasElement) {
   // Three.js core components
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(
-    THREEJS_CONFIG.camera.fov,
-    canvasElement.width / canvasElement.height,
-    THREEJS_CONFIG.camera.near,
-    THREEJS_CONFIG.camera.far
+
+  // Use orthographic camera for exact pixel-to-pixel overlay matching
+  // This creates a 2D-like projection that maps directly to canvas coordinates
+  const camera = new THREE.OrthographicCamera(
+    0,                          // left
+    canvasElement.width,        // right
+    0,                          // top
+    canvasElement.height,       // bottom
+    -2000,                      // near (enough depth for face Z-coordinates)
+    2000                        // far
   );
 
   const renderer = new THREE.WebGLRenderer({
@@ -160,36 +134,44 @@ export function createGraphics3D(canvasElement) {
   renderer.setSize(canvasElement.width, canvasElement.height);
   renderer.setPixelRatio(window.devicePixelRatio);
 
-  // Scene setup
+  // Scene setup - transparent background for overlay
   const bgConfig = THREEJS_CONFIG.scene;
-  scene.background = new THREE.Color(bgConfig.background);
-
-  if (bgConfig.fog.enabled) {
-    scene.fog = new THREE.Fog(
-      bgConfig.fog.color,
-      bgConfig.fog.near,
-      bgConfig.fog.far
-    );
+  if (bgConfig.background === null || bgConfig.background === 'transparent') {
+    scene.background = null; // Transparent
+  } else {
+    scene.background = new THREE.Color(bgConfig.background);
   }
 
-  // Camera setup
-  const camPos = THREEJS_CONFIG.camera.position;
-  camera.position.set(camPos.x, camPos.y, camPos.z);
-  camera.lookAt(0, 0, 0);
+  // No fog for overlay mode
+  // Camera positioned to look at the canvas plane
+  const cameraDefaultDistance = 1000;
+  let currentCanvasWidth = Math.max(
+    1,
+    canvasElement.width || canvasElement.clientWidth || 1280
+  );
+  let currentCanvasHeight = Math.max(
+    1,
+    canvasElement.height || canvasElement.clientHeight || 720
+  );
 
-  // Orbit controls
-  let controls = null;
-  if (THREEJS_CONFIG.camera.controls.enabled) {
-    controls = new OrbitControls(camera, canvasElement);
-    const ctrlConfig = THREEJS_CONFIG.camera.controls;
-    controls.enableDamping = ctrlConfig.enableDamping;
-    controls.dampingFactor = ctrlConfig.dampingFactor;
-    controls.rotateSpeed = ctrlConfig.rotateSpeed;
-    controls.zoomSpeed = ctrlConfig.zoomSpeed;
-    controls.panSpeed = ctrlConfig.panSpeed;
-    controls.minDistance = ctrlConfig.minDistance;
-    controls.maxDistance = ctrlConfig.maxDistance;
+  function alignCameraToCanvas(width, height) {
+    const safeWidth = Math.max(1, width);
+    const safeHeight = Math.max(1, height);
+    currentCanvasWidth = safeWidth;
+    currentCanvasHeight = safeHeight;
+    camera.left = 0;
+    camera.right = safeWidth;
+    camera.top = 0;
+    camera.bottom = safeHeight;
+    camera.position.set(safeWidth / 2, safeHeight / 2, cameraDefaultDistance);
+    camera.lookAt(safeWidth / 2, safeHeight / 2, 0);
+    camera.updateProjectionMatrix();
   }
+
+  alignCameraToCanvas(currentCanvasWidth, currentCanvasHeight);
+
+  // No orbit controls - mesh follows face motion automatically
+  const controls = null;
 
   // Lighting setup
   const lights = [];
@@ -246,6 +228,13 @@ export function createGraphics3D(canvasElement) {
   let headMesh = null;
   let landmarkPoints = null;
 
+  // User settings (persist across mesh updates)
+  const userSettings = {
+    wireframe: false,
+    opacity: THREEJS_CONFIG.headModel.opacity,
+    landmarksVisible: THREEJS_CONFIG.landmarks.enabled,
+  };
+
   // ========================================================================
   // PUBLIC API
   // ========================================================================
@@ -274,27 +263,46 @@ export function createGraphics3D(canvasElement) {
       return;
     }
 
-    // Remove old mesh
+    // Update geometry only (reuse material if mesh exists)
     if (headMesh) {
-      scene.remove(headMesh);
-      headMesh.geometry.dispose();
-      headMesh.material.dispose();
-    }
-    if (landmarkPoints) {
-      scene.remove(landmarkPoints);
-      landmarkPoints.geometry.dispose();
-      landmarkPoints.material.dispose();
-    }
+      // Update existing mesh geometry
+      const newGeometry = headMesh.geometry;
+      const positions = [];
 
-    // Create new mesh
-    if (THREEJS_CONFIG.headModel.enabled) {
+      for (const landmark of landmarks) {
+        const x = landmark.x * canvasWidth;
+        const y = landmark.y * canvasHeight;
+        const z = -landmark.z * canvasWidth;
+        positions.push(x, y, z);
+      }
+
+      newGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      newGeometry.computeVertexNormals();
+    } else if (THREEJS_CONFIG.headModel.enabled) {
+      // Create new mesh first time
       headMesh = createHeadMesh(landmarks, canvasWidth, canvasHeight);
       scene.add(headMesh);
+
+      // Apply user settings
+      headMesh.material.wireframe = userSettings.wireframe;
+      headMesh.material.opacity = userSettings.opacity;
     }
 
-    if (THREEJS_CONFIG.landmarks.enabled) {
-      landmarkPoints = createLandmarkPoints(landmarks);
+    // Update landmark points
+    if (landmarkPoints) {
+      const positions = [];
+      for (const landmark of landmarks) {
+        const x = landmark.x * canvasWidth;
+        const y = landmark.y * canvasHeight;
+        const z = -landmark.z * canvasWidth;
+        positions.push(x, y, z);
+      }
+      landmarkPoints.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      landmarkPoints.visible = userSettings.landmarksVisible;
+    } else if (THREEJS_CONFIG.landmarks.enabled) {
+      landmarkPoints = createLandmarkPoints(landmarks, canvasWidth, canvasHeight);
       scene.add(landmarkPoints);
+      landmarkPoints.visible = userSettings.landmarksVisible;
     }
   }
 
@@ -302,9 +310,6 @@ export function createGraphics3D(canvasElement) {
    * Render the scene
    */
   function render() {
-    if (controls) {
-      controls.update();
-    }
     renderer.render(scene, camera);
   }
 
@@ -314,8 +319,7 @@ export function createGraphics3D(canvasElement) {
    * @param {number} height - New height
    */
   function handleResize(width, height) {
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
+    alignCameraToCanvas(width, height);
     renderer.setSize(width, height);
   }
 
@@ -343,21 +347,13 @@ export function createGraphics3D(canvasElement) {
   function dispose() {
     clear();
     renderer.dispose();
-    if (controls) {
-      controls.dispose();
-    }
   }
 
   /**
-   * Reset camera to default position
+   * Reset camera to default position (no-op for overlay mode)
    */
   function resetCamera() {
-    const pos = THREEJS_CONFIG.camera.position;
-    camera.position.set(pos.x, pos.y, pos.z);
-    camera.lookAt(0, 0, 0);
-    if (controls) {
-      controls.reset();
-    }
+    alignCameraToCanvas(currentCanvasWidth, currentCanvasHeight);
   }
 
   /**
@@ -365,6 +361,7 @@ export function createGraphics3D(canvasElement) {
    * @param {boolean} enabled - Enable wireframe
    */
   function setWireframe(enabled) {
+    userSettings.wireframe = enabled;
     if (headMesh) {
       headMesh.material.wireframe = enabled;
     }
@@ -375,8 +372,10 @@ export function createGraphics3D(canvasElement) {
    * @param {number} opacity - Opacity value (0-1)
    */
   function setOpacity(opacity) {
+    const clampedOpacity = Math.max(0, Math.min(1, opacity));
+    userSettings.opacity = clampedOpacity;
     if (headMesh) {
-      headMesh.material.opacity = Math.max(0, Math.min(1, opacity));
+      headMesh.material.opacity = clampedOpacity;
     }
   }
 
@@ -385,6 +384,7 @@ export function createGraphics3D(canvasElement) {
    * @param {boolean} visible - Show landmarks
    */
   function setLandmarksVisible(visible) {
+    userSettings.landmarksVisible = visible;
     if (landmarkPoints) {
       landmarkPoints.visible = visible;
     }

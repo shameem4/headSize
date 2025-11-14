@@ -98,16 +98,14 @@ async function renderFrame() {
   ui.renderMetricsPanel(state.getMeasurements(), state.getSmoothedDistance());
 
   // Render based on mode
-  if (currentRenderMode === "canvas2d" || currentRenderMode === "hybrid") {
+  if (currentRenderMode === "canvas2d") {
     // Clear and draw 2D canvas
     ui.clearCanvas();
     ui.graphics.beginFrame();
     ui.graphics.drawMeasurementOverlays(state.getMeasurements(), {
       noseOverlayEnabled: UI_CONFIG.noseOverlayEnabled
     });
-  }
-
-  if (currentRenderMode === "threejs" || currentRenderMode === "hybrid") {
+  } else if (currentRenderMode === "threejs") {
     // Update and render 3D scene
     if (graphics3D && lastLandmarks) {
       const { width, height } = ui.getCanvasDisplaySize();
@@ -132,17 +130,14 @@ function updateCanvasVisibility(mode) {
   const threejsControls = document.getElementById("threejs_controls");
 
   if (mode === "canvas2d") {
+    // 2D mode: Show 2D canvas with measurements, hide 3D
     canvas2D.style.display = "block";
     canvas3DEl.style.display = "none";
     threejsControls.style.display = "none";
   } else if (mode === "threejs") {
+    // 3D mode: Hide 2D measurements, show 3D mesh over video
     canvas2D.style.display = "none";
     canvas3DEl.style.display = "block";
-    threejsControls.style.display = "block";
-  } else if (mode === "hybrid") {
-    canvas2D.style.display = "block";
-    canvas3DEl.style.display = "block";
-    canvas3DEl.style.opacity = "0.8";
     threejsControls.style.display = "block";
   }
 }

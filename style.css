@@ -390,14 +390,9 @@ body {
   top: 0;
 }
 
-/* 3D canvas specific styles */
+/* 3D canvas specific styles - no interaction, just overlay */
 #output_canvas_3d {
-  pointer-events: auto;
-  cursor: grab;
-}
-
-#output_canvas_3d:active {
-  cursor: grabbing;
+  pointer-events: none; /* Allow clicks to pass through to video */
 }
 
 /* 3D Controls */

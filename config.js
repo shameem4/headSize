@@ -312,7 +312,7 @@ export const THREEJS_CONFIG = {
   // 3D head model
   headModel: {
     enabled: true,
-    opacity: 0.85,
+    opacity: 0.5,
     wireframe: false,
     color: 0x88ccff,
     emissive: 0x223344,

@@ -55,6 +55,7 @@ export class ModelManager {
       outputFacialTransformationMatrixes: true,
       runningMode: config.runningMode,
       numFaces: 1,
+      refineLandmarks: true, // Enable iris landmarks (468-477)
     });
 
     return new ModelManager(gestureRecognizer, faceLandmarker);

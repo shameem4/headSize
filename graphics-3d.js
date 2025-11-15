@@ -13,8 +13,30 @@
  */
 
 import * as THREE from 'three';
-import { THREEJS_CONFIG, COLOR_CONFIG } from './config.js';
-import { FACE_MESH_TRIANGLES } from './face-mesh-triangles.js';
+import { THREEJS_CONFIG } from './config.js';
+import { FACE_MESH_TRIANGLES, IRIS_LEFT_CENTER, IRIS_RIGHT_CENTER } from './face-mesh-triangles.js';
+
+// ============================================================================
+// COORDINATE TRANSFORMATION UTILITIES
+// ============================================================================
+
+/**
+ * Convert MediaPipe landmark to 3D coordinates
+ * MediaPipe: x(0-1) left-to-right, y(0-1) top-to-bottom, z(depth around 0)
+ * Three.js: Direct mapping to canvas pixel coordinates
+ * @param {Object} landmark - MediaPipe landmark {x, y, z}
+ * @param {number} canvasWidth - Canvas width
+ * @param {number} canvasHeight - Canvas height
+ * @param {number} zOffset - Optional Z offset to apply
+ * @returns {Object} {x, y, z} in Three.js coordinate system
+ */
+function landmarkTo3D(landmark, canvasWidth, canvasHeight, zOffset = 0) {
+  return {
+    x: landmark.x * canvasWidth,
+    y: landmark.y * canvasHeight, // Direct mapping, no flip
+    z: -landmark.z * canvasWidth + zOffset
+  };
+}
 
 // ============================================================================
 // LANDMARK MESH GENERATION
@@ -33,15 +55,16 @@ function createHeadMesh(landmarks, canvasWidth, canvasHeight) {
   // Convert normalized landmarks to 3D positions
   const positions = [];
 
-  // Map directly to canvas pixel coordinates for overlay
-  // MediaPipe: x(0-1) left-to-right, y(0-1) top-to-bottom, z(depth around 0)
-  // Three.js: match canvas coordinates exactly
-  for (const landmark of landmarks) {
-    const x = landmark.x * canvasWidth;
-    const y = landmark.y * canvasHeight;
-    const z = -landmark.z * canvasWidth; // Negative Z so face points toward camera, scale by width for consistent depth
+  // Map landmarks to 3D coordinates with centralized Y-axis flipping
+  for (let i = 0; i < landmarks.length; i++) {
+    const landmark = landmarks[i];
 
-    positions.push(x, y, z);
+    // Offset iris/pupil landmarks forward to ensure they render in front
+    // Iris landmarks: 468-472 (left), 473-477 (right)
+    const zOffset = (i >= 468 && i <= 477) ? 20 : 0;
+
+    const pos = landmarkTo3D(landmark, canvasWidth, canvasHeight, zOffset);
+    positions.push(pos.x, pos.y, pos.z);
   }
 
   // Create triangulated face mesh
@@ -79,12 +102,10 @@ function createLandmarkPoints(landmarks, canvasWidth, canvasHeight) {
   const geometry = new THREE.BufferGeometry();
   const positions = [];
 
-  // Use same coordinate mapping as mesh
+  // Use centralized coordinate transformation
   for (const landmark of landmarks) {
-    const x = landmark.x * canvasWidth;
-    const y = landmark.y * canvasHeight;
-    const z = -landmark.z * canvasWidth;
-    positions.push(x, y, z);
+    const pos = landmarkTo3D(landmark, canvasWidth, canvasHeight, 0);
+    positions.push(pos.x, pos.y, pos.z);
   }
 
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -99,6 +120,92 @@ function createLandmarkPoints(landmarks, canvasWidth, canvasHeight) {
   });
 
   return new THREE.Points(geometry, material);
+}
+
+/**
+ * Create 3D pupil connection lines
+ * @param {Array} landmarks - MediaPipe normalized face landmarks
+ * @param {number} canvasWidth - Canvas width
+ * @param {number} canvasHeight - Canvas height
+ * @returns {THREE.LineSegments} Pupil connection lines
+ */
+function createPupilLines(landmarks, canvasWidth, canvasHeight) {
+  // Get pupil positions
+  const leftPupil = landmarks[IRIS_LEFT_CENTER];
+  const rightPupil = landmarks[IRIS_RIGHT_CENTER];
+
+  if (!leftPupil || !rightPupil) return null;
+
+  // Convert to 3D coordinates using centralized transformation
+  const leftPos = landmarkTo3D(leftPupil, canvasWidth, canvasHeight, 20);
+  const rightPos = landmarkTo3D(rightPupil, canvasWidth, canvasHeight, 20);
+
+  // Calculate the vector between eyes (to determine face rotation)
+  const eyeVecX = rightPos.x - leftPos.x;
+  const eyeVecY = rightPos.y - leftPos.y;
+  const eyeVecZ = rightPos.z - leftPos.z;
+
+  // Calculate perpendicular vector (normal to face plane, pointing toward camera)
+  // Cross product of eye vector with up vector gives us the face normal
+  // We want to extend along this normal direction
+  const upX = 0;
+  const upY = 1; // Up in MediaPipe/screen coords (positive Y is down)
+  const upZ = 0;
+
+  // Cross product: eyeVec × up = normal
+  let normalX = eyeVecY * upZ - eyeVecZ * upY;
+  let normalY = eyeVecZ * upX - eyeVecX * upZ;
+  let normalZ = eyeVecX * upY - eyeVecY * upX;
+
+  // Normalize the normal vector
+  const normalLength = Math.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+  if (normalLength > 0) {
+    normalX /= normalLength;
+    normalY /= normalLength;
+    normalZ /= normalLength;
+  }
+
+  // Calculate extension distance
+  const extensionDistance = 100;
+
+  // Extension points (along face normal - perpendicular to face)
+  const leftExtX = leftPos.x + normalX * extensionDistance;
+  const leftExtY = leftPos.y + normalY * extensionDistance;
+  const leftExtZ = leftPos.z + normalZ * extensionDistance;
+
+  const rightExtX = rightPos.x + normalX * extensionDistance;
+  const rightExtY = rightPos.y + normalY * extensionDistance;
+  const rightExtZ = rightPos.z + normalZ * extensionDistance;
+
+  // Create line geometry: 3 lines total
+  // Line 1: Left pupil to left extension point
+  // Line 2: Right pupil to right extension point
+  // Line 3: Left extension point to right extension point
+  const positions = new Float32Array([
+    // Line 1: Left pupil extension
+    leftPos.x, leftPos.y, leftPos.z,
+    leftExtX, leftExtY, leftExtZ,
+
+    // Line 2: Right pupil extension
+    rightPos.x, rightPos.y, rightPos.z,
+    rightExtX, rightExtY, rightExtZ,
+
+    // Line 3: Connect the extension points
+    leftExtX, leftExtY, leftExtZ,
+    rightExtX, rightExtY, rightExtZ,
+  ]);
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+  const material = new THREE.LineBasicMaterial({
+    color: 0x00ff00, // Green color
+    linewidth: 2,
+    transparent: true,
+    opacity: 0.8,
+  });
+
+  return new THREE.LineSegments(geometry, material);
 }
 
 // ============================================================================
@@ -163,8 +270,8 @@ export function createGraphics3D(canvasElement) {
     camera.right = safeWidth;
     camera.top = 0;
     camera.bottom = safeHeight;
-    camera.position.set(safeWidth / 2, safeHeight / 2, cameraDefaultDistance);
-    camera.lookAt(safeWidth / 2, safeHeight / 2, 0);
+    camera.position.set(0, 0, cameraDefaultDistance);
+    camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
   }
 
@@ -227,12 +334,14 @@ export function createGraphics3D(canvasElement) {
   // Scene objects
   let headMesh = null;
   let landmarkPoints = null;
+  let pupilLines = null;
 
   // User settings (persist across mesh updates)
   const userSettings = {
     wireframe: false,
     opacity: THREEJS_CONFIG.headModel.opacity,
     landmarksVisible: THREEJS_CONFIG.landmarks.enabled,
+    pupilLinesVisible: true,
   };
 
   // ========================================================================
@@ -260,6 +369,12 @@ export function createGraphics3D(canvasElement) {
         landmarkPoints.material.dispose();
         landmarkPoints = null;
       }
+      if (pupilLines) {
+        scene.remove(pupilLines);
+        pupilLines.geometry.dispose();
+        pupilLines.material.dispose();
+        pupilLines = null;
+      }
       return;
     }
 
@@ -269,11 +384,14 @@ export function createGraphics3D(canvasElement) {
       const newGeometry = headMesh.geometry;
       const positions = [];
 
-      for (const landmark of landmarks) {
-        const x = landmark.x * canvasWidth;
-        const y = landmark.y * canvasHeight;
-        const z = -landmark.z * canvasWidth;
-        positions.push(x, y, z);
+      for (let i = 0; i < landmarks.length; i++) {
+        const landmark = landmarks[i];
+
+        // Offset iris/pupil landmarks forward to ensure they render in front
+        const zOffset = (i >= 468 && i <= 477) ? 20 : 0;
+
+        const pos = landmarkTo3D(landmark, canvasWidth, canvasHeight, zOffset);
+        positions.push(pos.x, pos.y, pos.z);
       }
 
       newGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -292,10 +410,8 @@ export function createGraphics3D(canvasElement) {
     if (landmarkPoints) {
       const positions = [];
       for (const landmark of landmarks) {
-        const x = landmark.x * canvasWidth;
-        const y = landmark.y * canvasHeight;
-        const z = -landmark.z * canvasWidth;
-        positions.push(x, y, z);
+        const pos = landmarkTo3D(landmark, canvasWidth, canvasHeight, 0);
+        positions.push(pos.x, pos.y, pos.z);
       }
       landmarkPoints.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       landmarkPoints.visible = userSettings.landmarksVisible;
@@ -303,6 +419,74 @@ export function createGraphics3D(canvasElement) {
       landmarkPoints = createLandmarkPoints(landmarks, canvasWidth, canvasHeight);
       scene.add(landmarkPoints);
       landmarkPoints.visible = userSettings.landmarksVisible;
+    }
+
+    // Update pupil lines
+    if (landmarks.length > IRIS_RIGHT_CENTER) {
+      if (pupilLines) {
+        // Update existing pupil lines geometry
+        const leftPupil = landmarks[IRIS_LEFT_CENTER];
+        const rightPupil = landmarks[IRIS_RIGHT_CENTER];
+
+        if (leftPupil && rightPupil) {
+          // Convert to 3D coordinates using centralized transformation
+          const leftPos = landmarkTo3D(leftPupil, canvasWidth, canvasHeight, 20);
+          const rightPos = landmarkTo3D(rightPupil, canvasWidth, canvasHeight, 20);
+
+          // Calculate the vector between eyes
+          const eyeVecX = rightPos.x - leftPos.x;
+          const eyeVecY = rightPos.y - leftPos.y;
+          const eyeVecZ = rightPos.z - leftPos.z;
+
+          // Calculate perpendicular vector (normal to face plane)
+          const upX = 0;
+          const upY = 1; // Up in MediaPipe/screen coords (positive Y is down)
+          const upZ = 0;
+
+          // Cross product: eyeVec × up = normal
+          let normalX = eyeVecY * upZ - eyeVecZ * upY;
+          let normalY = eyeVecZ * upX - eyeVecX * upZ;
+          let normalZ = eyeVecX * upY - eyeVecY * upX;
+
+          // Normalize the normal vector
+          const normalLength = Math.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+          if (normalLength > 0) {
+            normalX /= normalLength;
+            normalY /= normalLength;
+            normalZ /= normalLength;
+          }
+
+          const extensionDistance = 100;
+
+          // Extension points (along face normal - perpendicular to face)
+          const leftExtX = leftPos.x + normalX * extensionDistance;
+          const leftExtY = leftPos.y + normalY * extensionDistance;
+          const leftExtZ = leftPos.z + normalZ * extensionDistance;
+
+          const rightExtX = rightPos.x + normalX * extensionDistance;
+          const rightExtY = rightPos.y + normalY * extensionDistance;
+          const rightExtZ = rightPos.z + normalZ * extensionDistance;
+
+          const positions = new Float32Array([
+            leftPos.x, leftPos.y, leftPos.z,
+            leftExtX, leftExtY, leftExtZ,
+            rightPos.x, rightPos.y, rightPos.z,
+            rightExtX, rightExtY, rightExtZ,
+            leftExtX, leftExtY, leftExtZ,
+            rightExtX, rightExtY, rightExtZ,
+          ]);
+
+          pupilLines.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        }
+        pupilLines.visible = userSettings.pupilLinesVisible;
+      } else {
+        // Create new pupil lines
+        pupilLines = createPupilLines(landmarks, canvasWidth, canvasHeight);
+        if (pupilLines) {
+          scene.add(pupilLines);
+          pupilLines.visible = userSettings.pupilLinesVisible;
+        }
+      }
     }
   }
 
@@ -338,6 +522,12 @@ export function createGraphics3D(canvasElement) {
       landmarkPoints.geometry.dispose();
       landmarkPoints.material.dispose();
       landmarkPoints = null;
+    }
+    if (pupilLines) {
+      scene.remove(pupilLines);
+      pupilLines.geometry.dispose();
+      pupilLines.material.dispose();
+      pupilLines = null;
     }
   }
 

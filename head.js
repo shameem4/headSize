@@ -46,11 +46,14 @@ class EyeSide {
     this.widthIdx = widthIdx;
     this.iris = null;
     this.segment = null;
+    this.smoothedDiameter = null;
+    this.smoothingFactor = 0.3; // Lower = smoother but slower response (0.2-0.4 recommended)
   }
 
   reset() {
     this.iris = null;
     this.segment = null;
+    this.smoothedDiameter = null;
   }
 
   update(landmarks, canvasWidth, canvasHeight, estimateDistanceFn) {
@@ -59,14 +62,41 @@ class EyeSide {
       return;
     }
     if (this.irisIndices) {
-      this.iris = computeIrisMeasurement(
+      // First compute raw measurement without distance calculation
+      const rawMeasurement = computeIrisMeasurement(
         landmarks,
         this.irisIndices.iris,
         this.irisIndices.pupil,
         canvasWidth,
         canvasHeight,
-        estimateDistanceFn
+        null // Don't calculate distance yet
       );
+
+      if (rawMeasurement && rawMeasurement.diameterPx > 0) {
+        // Apply exponential moving average smoothing to diameter
+        if (this.smoothedDiameter === null) {
+          this.smoothedDiameter = rawMeasurement.diameterPx;
+        } else {
+          this.smoothedDiameter =
+            this.smoothingFactor * rawMeasurement.diameterPx +
+            (1 - this.smoothingFactor) * this.smoothedDiameter;
+        }
+
+        // Calculate distance from smoothed diameter
+        const distanceCm =
+          typeof estimateDistanceFn === "function"
+            ? estimateDistanceFn(this.smoothedDiameter)
+            : null;
+
+        // Return measurement with smoothed diameter and calculated distance
+        this.iris = {
+          ...rawMeasurement,
+          diameterPx: this.smoothedDiameter,
+          distanceCm
+        };
+      } else {
+        this.iris = rawMeasurement;
+      }
     } else {
       this.iris = null;
     }

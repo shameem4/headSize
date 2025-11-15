@@ -105,8 +105,11 @@ async function renderFrame() {
     ui.graphics.drawMeasurementOverlays(state.getMeasurements(), {
       noseOverlayEnabled: UI_CONFIG.noseOverlayEnabled
     });
-  } else if (currentRenderMode === "threejs") {
-    // Update and render 3D scene
+  }
+
+  if (currentRenderMode === "hybrid") {
+    // Clear 2D canvas and render 3D scene only (no 2D overlays)
+    ui.clearCanvas();
     if (graphics3D && lastLandmarks) {
       const { width, height } = ui.getCanvasDisplaySize();
       graphics3D.updateFaceMesh(lastLandmarks, width, height);
@@ -130,13 +133,11 @@ function updateCanvasVisibility(mode) {
   const threejsControls = document.getElementById("threejs_controls");
 
   if (mode === "canvas2d") {
-    // 2D mode: Show 2D canvas with measurements, hide 3D
     canvas2D.style.display = "block";
     canvas3DEl.style.display = "none";
     threejsControls.style.display = "none";
-  } else if (mode === "threejs") {
-    // 3D mode: Hide 2D measurements, show 3D mesh over video
-    canvas2D.style.display = "none";
+  } else if (mode === "hybrid") {
+    canvas2D.style.display = "block";
     canvas3DEl.style.display = "block";
     threejsControls.style.display = "block";
   }
@@ -175,16 +176,11 @@ function setup3DControls() {
   // Opacity slider
   const opacitySlider = document.getElementById("opacity_slider");
   if (opacitySlider) {
+    // Set initial value from config
+    opacitySlider.value = THREEJS_CONFIG.headModel.opacity * 100;
+
     opacitySlider.addEventListener("input", (e) => {
       graphics3D.setOpacity(e.target.value / 100);
-    });
-  }
-
-  // Reset camera button
-  const resetCameraBtn = document.getElementById("reset_camera_btn");
-  if (resetCameraBtn) {
-    resetCameraBtn.addEventListener("click", () => {
-      graphics3D.resetCamera();
     });
   }
 }

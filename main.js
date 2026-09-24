@@ -24,6 +24,7 @@ const canvas3D = document.getElementById("output_canvas_3d");
 const ctx = canvas2D.getContext("2d");
 const threejsControls = document.getElementById("threejs_controls");
 const metricsPanelBody = document.getElementById("metrics_panel_body");
+const statusEl = document.getElementById("status");
 
 // Modules
 const measurer = createMeasurer(CAMERA_CONFIG, HEAD_CONFIG);
@@ -191,9 +192,38 @@ function setupControls() {
   window.addEventListener("resize", resizeDisplayToContainer);
 }
 
+function showError(message) {
+  statusEl.textContent = message;
+  statusEl.hidden = false;
+}
+
+/**
+ * User-facing message for a getUserMedia failure
+ * @param {Error} error
+ */
+function cameraErrorMessage(error) {
+  switch (error?.name) {
+    case "NotAllowedError":
+      return "Camera access was blocked. Allow camera access for this site, then reload.";
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return "No usable camera was found.";
+    case "NotReadableError":
+      return "The camera is in use by another app. Close it, then reload.";
+    default:
+      return `Could not start the camera (${error?.name || error}).`;
+  }
+}
+
 // Start application
 (async () => {
-  models = await ModelManager.initialize(CAMERA_CONFIG);
+  try {
+    models = await ModelManager.initialize(CAMERA_CONFIG);
+  } catch (error) {
+    console.error(error);
+    showError("Could not load the face model. Check your connection, then reload.");
+    return;
+  }
 
   setupControls();
   updateCanvasVisibility(currentRenderMode);
@@ -205,7 +235,13 @@ function setupControls() {
   camera.setMirrorEnabled(UI_CONFIG.mirrorEnabled);
   video.classList.toggle("mirrored", UI_CONFIG.mirrorEnabled);
 
-  await camera.initialize();
+  try {
+    await camera.initialize();
+  } catch (error) {
+    console.error(error);
+    showError(cameraErrorMessage(error));
+    return;
+  }
   video.addEventListener(
     "loadedmetadata",
     () => {

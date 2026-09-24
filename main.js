@@ -1,29 +1,38 @@
 /**
- * Main Application Entry - orchestrates all modules
+ * Main Application Entry - UI, wiring and render loop
  * @module main
  */
 
-import { estimateCameraDistanceCm as calcEstimateDistance } from "./calculations.js";
-import { CAMERA_CONFIG, HEAD_CONFIG, UI_CONFIG, THREEJS_CONFIG } from "./config.js";
-import { createHeadTracker } from "./head.js";
-import { UIManager } from "./core/ui-manager.js";
-import { StateManager } from "./core/state-manager.js";
-import { CameraManager } from "./core/camera-manager.js";
-import { ModelManager } from "./core/model-manager.js";
-import { createGraphics3D } from "./graphics-3d.js";
+import {
+  CAMERA_CONFIG,
+  HEAD_CONFIG,
+  UI_CONFIG,
+  THREEJS_CONFIG,
+  COLOR_CONFIG,
+  IPD_OVERLAY_CONFIG,
+} from "./config.js";
+import { estimateCameraDistanceCm, createHeadTracker, StateManager } from "./measure.js";
+import { CameraManager, ModelManager } from "./camera.js";
+import { createGraphics } from "./overlay-2d.js";
+import { createGraphics3D } from "./overlay-3d.js";
 
 const IRIS_DIAMETER_MM = CAMERA_CONFIG.irisDiameterMm;
 const FOCAL_LENGTH_PX = CAMERA_CONFIG.focalLengthScale();
 
-// Initialize core modules
-const ui = new UIManager();
-const state = new StateManager(CAMERA_CONFIG);
-const camera = new CameraManager(ui.video, CAMERA_CONFIG);
-const head = createHeadTracker(HEAD_CONFIG);
-
+// DOM
+const video = document.getElementById("webcam");
+const liveView = document.getElementById("liveView");
 const canvas2D = document.getElementById("output_canvas");
 const canvas3D = document.getElementById("output_canvas_3d");
+const ctx = canvas2D.getContext("2d");
 const threejsControls = document.getElementById("threejs_controls");
+const metricsPanelBody = document.getElementById("metrics_panel_body");
+
+// Modules
+const state = new StateManager(CAMERA_CONFIG);
+const camera = new CameraManager(video, CAMERA_CONFIG);
+const head = createHeadTracker(HEAD_CONFIG);
+const graphics = createGraphics(ctx);
 const graphics3D = createGraphics3D(canvas3D);
 
 // Application state
@@ -31,14 +40,92 @@ let models;
 let lastLandmarks = null;
 let currentRenderMode = UI_CONFIG.renderMode;
 
+// ============================================================================
+// DISPLAY
+// ============================================================================
+
 /**
- * Estimate camera distance from iris diameter in pixels
- * @param {number} diameterPx - Iris diameter in pixels
- * @returns {number|null} Distance in centimeters
+ * Canvas display size (CSS size, not backing buffer size)
+ * @returns {{width: number, height: number}}
  */
-function estimateCameraDistanceCm(diameterPx) {
-  return calcEstimateDistance(diameterPx, FOCAL_LENGTH_PX, IRIS_DIAMETER_MM);
+function getCanvasDisplaySize() {
+  const r = canvas2D.getBoundingClientRect();
+  return { width: Math.round(r.width), height: Math.round(r.height) };
 }
+
+/**
+ * Fit video and 2D canvas to the container, keeping aspect ratio
+ */
+function resizeDisplayToContainer() {
+  const rect = liveView.getBoundingClientRect();
+  const targetW = Math.max(1, Math.floor(rect.width));
+  const targetH = Math.max(1, Math.floor(rect.height));
+
+  const vidW = video.videoWidth || 1280;
+  const vidH = video.videoHeight || 720;
+  const scale = Math.min(targetW / vidW, targetH / vidH);
+
+  const w = Math.round(vidW * scale);
+  const h = Math.round(vidH * scale);
+
+  video.style.width = `${w}px`;
+  video.style.height = `${h}px`;
+  canvas2D.style.width = `${w}px`;
+  canvas2D.style.height = `${h}px`;
+
+  // Keep the backing buffer sharp on HiDPI
+  const dpr = window.devicePixelRatio || 1;
+  canvas2D.width = Math.round(w * dpr);
+  canvas2D.height = Math.round(h * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+const fmt = (v, unit) => (v == null || !Number.isFinite(v) ? "--" : `${v.toFixed(1)}${unit}`);
+const mm = (v) => fmt(v, " mm");
+const deg = (v) => fmt(v, "°");
+
+function metricRow(label, value, color) {
+  const style = color ? ` style="color:${color}"` : "";
+  return `<div class="metric-row"${style}><span class="label">${label}</span><span class="value">${value}</span></div>`;
+}
+
+function metricCard(title, rows) {
+  return `<div class="metric-card"><h2>${title}</h2>${rows.join("")}</div>`;
+}
+
+/**
+ * Render the metrics panel
+ * @param {Object} m - Measurement state
+ * @param {number|null} distanceCm - Camera distance in centimeters
+ */
+function renderMetricsPanel(m, distanceCm) {
+  const nose = m.nose || {};
+  const noseColors = COLOR_CONFIG.noseMetrics;
+  const ipdRows = m.ipd
+    ? IPD_OVERLAY_CONFIG.rails.map(({ key, label }) => metricRow(label, mm(m.ipd[key]), COLOR_CONFIG.ipd[key]))
+    : [metricRow("Values", "--")];
+
+  metricsPanelBody.innerHTML = [
+    metricCard("Camera", [metricRow("Distance", fmt(distanceCm, " cm"))]),
+    metricCard("Face", [metricRow("Width", mm(m.faceWidth?.valueMm))]),
+    metricCard("Eyes", [
+      metricRow("Left width", mm(m.eyes?.left?.valueMm)),
+      metricRow("Right width", mm(m.eyes?.right?.valueMm)),
+    ]),
+    metricCard("IPD", ipdRows),
+    metricCard("Nose", [
+      metricRow("Bridge width", mm(nose.bridgeWidthMm), noseColors.bridge),
+      metricRow("Pad width", mm(nose.padSpanMm), noseColors.padSpan),
+      metricRow("Pad height", mm(nose.padHeightMm), noseColors.padHeight),
+      metricRow("Pad angle", deg(nose.padAngleDeg), noseColors.padAngle),
+      metricRow("Flare angle", deg(nose.flareAngleDeg), noseColors.flareAngle),
+    ]),
+  ].join("");
+}
+
+// ============================================================================
+// RENDER LOOP
+// ============================================================================
 
 /**
  * Process face landmarks and update head tracking
@@ -56,17 +143,16 @@ function processFaceLandmarks(faceResults) {
   const landmarks = faceResults.faceLandmarks[0];
   if (!landmarks) return null;
 
-  const { width, height } = ui.getCanvasDisplaySize();
+  const { width, height } = getCanvasDisplaySize();
   lastLandmarks = camera.applyMirrorIfEnabled(landmarks);
-  head.update(lastLandmarks, width, height, estimateCameraDistanceCm);
+  head.update(lastLandmarks, width, height, (d) =>
+    estimateCameraDistanceCm(d, FOCAL_LENGTH_PX, IRIS_DIAMETER_MM)
+  );
   return head.getAverageCameraDistance();
 }
 
-/**
- * Main render loop - processes video frames and draws overlays
- */
 function renderFrame() {
-  const { faceResults } = models.processFrame(ui.video);
+  const { faceResults } = models.processFrame(video);
   const frameDistanceCm = processFaceLandmarks(faceResults);
 
   // Update distance with smoothing
@@ -77,14 +163,14 @@ function renderFrame() {
   }
 
   state.updateMeasurements(head, IRIS_DIAMETER_MM);
-  ui.renderMetricsPanel(state.getMeasurements(), state.getSmoothedDistance());
+  renderMetricsPanel(state.getMeasurements(), state.getSmoothedDistance());
 
-  ui.clearCanvas();
+  ctx.clearRect(0, 0, canvas2D.width, canvas2D.height);
   if (currentRenderMode === "canvas2d") {
-    ui.graphics.beginFrame();
-    ui.graphics.drawMeasurementOverlays(state.getMeasurements());
+    graphics.beginFrame();
+    graphics.drawMeasurementOverlays(state.getMeasurements());
   } else if (lastLandmarks) {
-    const { width, height } = ui.getCanvasDisplaySize();
+    const { width, height } = getCanvasDisplaySize();
     graphics3D.updateFaceMesh(lastLandmarks, width, height);
     graphics3D.render();
   }
@@ -92,9 +178,10 @@ function renderFrame() {
   window.requestAnimationFrame(renderFrame);
 }
 
-/**
- * Toggle canvas visibility based on render mode
- */
+// ============================================================================
+// CONTROLS
+// ============================================================================
+
 function updateCanvasVisibility(mode) {
   const is3D = mode === "hybrid";
   canvas2D.style.display = "block";
@@ -102,10 +189,11 @@ function updateCanvasVisibility(mode) {
   threejsControls.style.display = is3D ? "block" : "none";
 }
 
-/**
- * Setup 3D controls event listeners
- */
-function setup3DControls() {
+function setupControls() {
+  document.querySelectorAll('input[name="focus"]').forEach((radio) => {
+    radio.addEventListener("change", (e) => graphics.setRenderPolicy({ focus: e.target.value }));
+  });
+
   document.querySelectorAll('input[name="renderMode"]').forEach((radio) => {
     radio.addEventListener("change", (e) => {
       currentRenderMode = e.target.value;
@@ -126,32 +214,30 @@ function setup3DControls() {
   opacitySlider.addEventListener("input", (e) => {
     graphics3D.setOpacity(e.target.value / 100);
   });
+
+  window.addEventListener("resize", resizeDisplayToContainer);
 }
 
 // Start application
 (async () => {
   models = await ModelManager.initialize(CAMERA_CONFIG);
 
-  ui.setupEventListeners({
-    onFocusChange: (focus) => ui.graphics.setRenderPolicy({ focus }),
-  });
-
-  setup3DControls();
+  setupControls();
   updateCanvasVisibility(currentRenderMode);
 
   const initialFocus =
     document.querySelector('input[name="focus"]:checked')?.value || "face";
-  ui.graphics.setRenderPolicy({ focus: initialFocus });
+  graphics.setRenderPolicy({ focus: initialFocus });
 
   camera.setMirrorEnabled(UI_CONFIG.mirrorEnabled);
-  ui.applyMirrorSetting(UI_CONFIG.mirrorEnabled);
+  video.classList.toggle("mirrored", UI_CONFIG.mirrorEnabled);
 
   await camera.initialize();
-  ui.video.addEventListener(
+  video.addEventListener(
     "loadedmetadata",
     () => {
-      ui.resizeDisplayToContainer();
-      const { width, height } = ui.getCanvasDisplaySize();
+      resizeDisplayToContainer();
+      const { width, height } = getCanvasDisplaySize();
       graphics3D.handleResize(width, height);
       renderFrame();
     },

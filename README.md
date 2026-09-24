@@ -33,19 +33,12 @@ Then open http://localhost:8000 and allow camera access.
 
 ```text
 index.html, style.css      UI
-main.js                    Wiring and render loop
+main.js                    Metrics panel, controls, canvas sizing, render loop
 config.js                  Landmark indices, smoothing, colors, overlay layout
-calculations.js            Iris fit, distance, IPD/face/eye/nose metrics
-head.js                    Per-frame landmark projection and per-eye iris smoothing
-core/
-  camera-manager.js        Webcam selection and landmark mirroring
-  model-manager.js         MediaPipe Face Landmarker setup and inference
-  state-manager.js         Iris-based mm scale, measurements, distance smoothing
-  ui-manager.js            Canvas sizing and metrics panel
-graphics.js                2D overlay orchestration (focus modes)
-graphics/                  Face/eye and nose overlay drawing
-utils/                     Geometry, drawing primitives, label collisions, formatters
-graphics-3d.js             Three.js 3D overlay
+camera.js                  Webcam selection, landmark mirroring, MediaPipe setup
+measure.js                 Iris fit, mm scale, distance, IPD/face/eye/nose metrics
+overlay-2d.js              2D rails, labels and nose overlays (focus modes)
+overlay-3d.js              Three.js mesh, landmark points and pupil lines
 face-mesh-triangles.js     Mesh triangulation (from face_model_with_iris.obj)
 face_model_with_iris.obj   MediaPipe canonical face model with iris (reference data)
 ```

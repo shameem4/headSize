@@ -8,7 +8,7 @@
 
 import * as THREE from 'three';
 import { THREEJS_CONFIG } from './config.js';
-import { FACE_MESH_TRIANGLES, IRIS_LEFT_CENTER, IRIS_RIGHT_CENTER } from './face-mesh-triangles.js';
+import { FACE_MESH_TRIANGLES, RIGHT_PUPIL, LEFT_PUPIL } from './face-mesh-triangles.js';
 
 // Iris/pupil landmarks (468-477) are pushed forward so they render in front
 const IRIS_Z_OFFSET = 20;
@@ -36,32 +36,27 @@ function landmarkTo3D(landmark, canvasWidth, canvasHeight, zOffset = 0) {
 }
 
 /**
- * Flatten landmarks into an xyz position array
+ * Write landmark xyz positions into a buffer attribute in place
  * @param {boolean} offsetIris - Push iris landmarks forward
- * @returns {number[]}
  */
-function landmarkPositions(landmarks, canvasWidth, canvasHeight, offsetIris) {
-  const positions = [];
+function writePositions(attribute, landmarks, canvasWidth, canvasHeight, offsetIris) {
   for (let i = 0; i < landmarks.length; i++) {
     const zOffset = offsetIris && i >= 468 && i <= 477 ? IRIS_Z_OFFSET : 0;
     const pos = landmarkTo3D(landmarks[i], canvasWidth, canvasHeight, zOffset);
-    positions.push(pos.x, pos.y, pos.z);
+    attribute.setXYZ(i, pos.x, pos.y, pos.z);
   }
-  return positions;
+  attribute.needsUpdate = true;
 }
 
 /**
  * Compute pupil line segments: each pupil extended along the face normal,
  * plus a line joining the two extension points
- * @returns {Float32Array|null} 3 line segments (18 floats)
+ * @returns {Float32Array} 3 line segments (18 floats)
  */
 function pupilLinePositions(landmarks, canvasWidth, canvasHeight) {
-  const leftPupil = landmarks[IRIS_LEFT_CENTER];
-  const rightPupil = landmarks[IRIS_RIGHT_CENTER];
-  if (!leftPupil || !rightPupil) return null;
-
-  const leftPos = landmarkTo3D(leftPupil, canvasWidth, canvasHeight, IRIS_Z_OFFSET);
-  const rightPos = landmarkTo3D(rightPupil, canvasWidth, canvasHeight, IRIS_Z_OFFSET);
+  // "left"/"right" here are the line's two ends; the face normal only needs a consistent order
+  const leftPos = landmarkTo3D(landmarks[RIGHT_PUPIL], canvasWidth, canvasHeight, IRIS_Z_OFFSET);
+  const rightPos = landmarkTo3D(landmarks[LEFT_PUPIL], canvasWidth, canvasHeight, IRIS_Z_OFFSET);
 
   // Face normal = eyeVec × up, with up = (0, 1, 0) in screen coords
   let normalX = -(rightPos.z - leftPos.z);
@@ -120,8 +115,13 @@ export function createGraphics3D(canvasElement) {
 
   // Head mesh
   const headConfig = THREEJS_CONFIG.headModel;
+  const LANDMARK_COUNT = 478;
+  const newPositionAttribute = (count) =>
+    new THREE.BufferAttribute(new Float32Array(count * 3), 3).setUsage(THREE.DynamicDrawUsage);
+
   const headGeometry = new THREE.BufferGeometry();
   headGeometry.setIndex(FACE_MESH_TRIANGLES.flat());
+  headGeometry.setAttribute('position', newPositionAttribute(LANDMARK_COUNT));
   const headMesh = new THREE.Mesh(
     headGeometry,
     new THREE.MeshPhongMaterial({
@@ -138,8 +138,10 @@ export function createGraphics3D(canvasElement) {
 
   // Landmark points
   const pointsConfig = THREEJS_CONFIG.landmarks;
+  const pointsGeometry = new THREE.BufferGeometry();
+  pointsGeometry.setAttribute('position', newPositionAttribute(LANDMARK_COUNT));
   const landmarkPoints = new THREE.Points(
-    new THREE.BufferGeometry(),
+    pointsGeometry,
     new THREE.PointsMaterial({
       size: pointsConfig.size,
       color: pointsConfig.color,
@@ -148,11 +150,12 @@ export function createGraphics3D(canvasElement) {
       sizeAttenuation: true,
     })
   );
-  landmarkPoints.visible = pointsConfig.visible;
 
   // Pupil lines
+  const pupilGeometry = new THREE.BufferGeometry();
+  pupilGeometry.setAttribute('position', newPositionAttribute(6));
   const pupilLines = new THREE.LineSegments(
-    new THREE.BufferGeometry(),
+    pupilGeometry,
     new THREE.LineBasicMaterial({
       color: 0x00ff00,
       linewidth: 2,
@@ -161,7 +164,12 @@ export function createGraphics3D(canvasElement) {
     })
   );
 
-  scene.add(headMesh, landmarkPoints, pupilLines);
+  // Everything is shown or hidden together (hidden when no face)
+  const face = new THREE.Group();
+  face.add(headMesh, landmarkPoints, pupilLines);
+  face.visible = false;
+  landmarkPoints.visible = pointsConfig.visible;
+  scene.add(face);
 
   // ========================================================================
   // PUBLIC API
@@ -169,27 +177,24 @@ export function createGraphics3D(canvasElement) {
 
   /**
    * Update scene with new face landmarks
-   * @param {Array} landmarks - MediaPipe face landmarks
+   * @param {Array|null} landmarks - MediaPipe face landmarks (null hides the face)
    * @param {number} canvasWidth - Canvas width
    * @param {number} canvasHeight - Canvas height
    */
   function updateFaceMesh(landmarks, canvasWidth, canvasHeight) {
-    headGeometry.setAttribute(
-      'position',
-      new THREE.Float32BufferAttribute(landmarkPositions(landmarks, canvasWidth, canvasHeight, true), 3)
-    );
+    face.visible = Boolean(landmarks);
+    if (!landmarks) return;
+
+    writePositions(headGeometry.attributes.position, landmarks, canvasWidth, canvasHeight, true);
     headGeometry.computeVertexNormals();
+    headGeometry.computeBoundingSphere();
 
-    landmarkPoints.geometry.setAttribute(
-      'position',
-      new THREE.Float32BufferAttribute(landmarkPositions(landmarks, canvasWidth, canvasHeight, false), 3)
-    );
+    writePositions(pointsGeometry.attributes.position, landmarks, canvasWidth, canvasHeight, false);
+    pointsGeometry.computeBoundingSphere();
 
-    const pupilPositions = pupilLinePositions(landmarks, canvasWidth, canvasHeight);
-    pupilLines.visible = Boolean(pupilPositions);
-    if (pupilPositions) {
-      pupilLines.geometry.setAttribute('position', new THREE.BufferAttribute(pupilPositions, 3));
-    }
+    pupilGeometry.attributes.position.array.set(pupilLinePositions(landmarks, canvasWidth, canvasHeight));
+    pupilGeometry.attributes.position.needsUpdate = true;
+    pupilGeometry.computeBoundingSphere();
   }
 
   /**

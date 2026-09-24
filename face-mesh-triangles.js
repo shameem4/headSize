@@ -921,7 +921,7 @@ export const FACE_MESH_TRIANGLES = [
 ];
 
 /**
- * Iris center landmark indices (beyond the base 468 face landmarks)
+ * Pupil (iris center) landmark indices, subject's left/right
  */
-export const IRIS_LEFT_CENTER = 468;
-export const IRIS_RIGHT_CENTER = 473;
+export const RIGHT_PUPIL = 468;
+export const LEFT_PUPIL = 473;

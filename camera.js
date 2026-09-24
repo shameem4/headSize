@@ -8,8 +8,6 @@ import {
   FaceLandmarker,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
-/** @typedef {{x: number, y: number}} Point */
-
 /**
  * Manages camera access and video stream operations
  */
@@ -25,64 +23,37 @@ export class CameraManager {
   }
 
   /**
-   * Find the best front-facing camera (prioritizes wide-angle front cameras)
-   * Uses camera priorities from centralized config
-   * @returns {Promise<string|null>} Device ID of preferred camera or null
+   * Device ID of the highest-priority camera by label, or null if none match.
+   * Labels are only readable after camera permission has been granted.
+   * @returns {Promise<string|null>}
    */
-  async findBestFrontCamera() {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter((device) => device.kind === "videoinput");
-
-      if (videoDevices.length === 0) return null;
-
-      const priorities = this.config.cameraPreferences.priorities;
-
-      // Try each priority pattern
-      for (const pattern of priorities) {
-        const match = videoDevices.find((device) => pattern.test(device.label));
-        if (match) {
-          console.log(`Selected camera: ${match.label}`);
-          return match.deviceId;
-        }
-      }
-
-      // Fallback: return first video device
-      console.log(`Using default camera: ${videoDevices[0].label}`);
-      return videoDevices[0].deviceId;
-    } catch (error) {
-      console.warn("Could not enumerate devices:", error);
-      return null;
+  async findPreferredCamera() {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter((device) => device.kind === "videoinput");
+    for (const pattern of this.config.cameraPreferences.priorities) {
+      const match = videoDevices.find((device) => pattern.test(device.label));
+      if (match) return match.deviceId;
     }
+    return null;
   }
 
   /**
-   * Initialize camera and request user media
+   * Open the front camera, then switch to a preferred one (e.g. "Front Wide")
+   * if it is a different device
    */
   async initialize() {
-    // Try to find the best front-facing camera
-    const deviceId = await this.findBestFrontCamera();
+    const { videoSize, cameraPreferences } = this.config;
+    const size = { width: videoSize.width, height: videoSize.height, resizeMode: "none" };
+    const open = (video) => navigator.mediaDevices.getUserMedia({ audio: false, video: { ...size, ...video } });
 
-    const facingMode = this.config.cameraPreferences.facingMode;
-
-    const constraints = {
-      audio: false,
-      video: deviceId
-        ? {
-            deviceId: { exact: deviceId },
-            width: this.config.videoSize.width,
-            height: this.config.videoSize.height,
-            resizeMode: "none",
-          }
-        : {
-            width: this.config.videoSize.width,
-            height: this.config.videoSize.height,
-            facingMode: facingMode,
-            resizeMode: "none",
-          },
-    };
-
-    this.video.srcObject = await navigator.mediaDevices.getUserMedia(constraints);
+    let stream = await open({ facingMode: cameraPreferences.facingMode });
+    const preferredId = await this.findPreferredCamera();
+    const currentId = stream.getVideoTracks()[0]?.getSettings().deviceId;
+    if (preferredId && preferredId !== currentId) {
+      stream.getTracks().forEach((track) => track.stop());
+      stream = await open({ deviceId: { exact: preferredId } });
+    }
+    this.video.srcObject = stream;
   }
 
   /**

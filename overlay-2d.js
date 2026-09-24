@@ -697,84 +697,38 @@ function drawPadHeightBox(ctx, bridgeRow, padRow, value, color) {
 }
 
 /**
- * Draw pad angle with compact arc and box label (reference style)
+ * Draw an angle as an arc at its vertex with a label on the bisector
+ * @param {Object} lines - {origin, lineAEnd, lineBEnd} in screen coordinates
+ * @param {Object} opts - {radius, labelDist, textAcross}; textAcross puts the
+ *   text perpendicular to the bisector instead of along it
  */
-function drawPadAngleBox(ctx, lines, value, color) {
-  if (!lines) return;
-
+function drawAngleBox(ctx, lines, text, color, { radius, labelDist, textAcross = false }) {
   const { origin, lineAEnd, lineBEnd } = lines;
-
-  // Draw small arc
-  const radius = 20;
   const angleA = Math.atan2(lineAEnd.y - origin.y, lineAEnd.x - origin.x);
   const angleB = Math.atan2(lineBEnd.y - origin.y, lineBEnd.x - origin.x);
 
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(origin.x, origin.y, radius, angleA, angleB, angleB < angleA);
-  ctx.stroke();
-  ctx.restore();
-
-  // Label position on bisector
-  const bisector = (angleA + angleB) / 2;
-  const labelDist = radius + 25;
-  const labelPos = {
-    x: origin.x + Math.cos(bisector) * labelDist,
-    y: origin.y + Math.sin(bisector) * labelDist,
-  };
-
-  // Draw text with rotation matching bisector angle
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.font = "bold 12px 'Segoe UI', sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.translate(labelPos.x, labelPos.y);
-  ctx.rotate(bisector);
-  ctx.fillText(`Pad Angle ${value.toFixed(1)}°`, 0, 0);
-  ctx.restore();
-}
-
-/**
- * Draw flare angle with compact arc and box label (reference style)
- */
-function drawFlareAngleBox(ctx, padRow, value, color) {
-  if (!padRow?.left || !padRow?.right) return;
-
-  const centerX = (padRow.left.x + padRow.right.x) / 2;
-  const baseY = Math.max(padRow.left.y, padRow.right.y) + 15;
-  const origin = { x: centerX, y: baseY };
-
-  // Draw small arc
-  const radius = 25;
-  const angleLeft = Math.atan2(padRow.left.y - origin.y, padRow.left.x - origin.x);
-  const angleRight = Math.atan2(padRow.right.y - origin.y, padRow.right.x - origin.x);
+  // Signed sweep from A to B, taking the smaller way round
+  let sweep = angleB - angleA;
+  if (sweep > Math.PI) sweep -= 2 * Math.PI;
+  if (sweep < -Math.PI) sweep += 2 * Math.PI;
 
   ctx.save();
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(origin.x, origin.y, radius, angleRight, angleLeft, false);
+  ctx.arc(origin.x, origin.y, radius, angleA, angleA + sweep, sweep < 0);
   ctx.stroke();
   ctx.restore();
 
-  // Calculate angle from pad row for text rotation
-  const padAngle = Math.atan2(
-    padRow.right.y - padRow.left.y,
-    padRow.right.x - padRow.left.x
-  );
-
-  // Draw text with rotation matching head orientation
+  const bisector = angleA + sweep / 2;
   ctx.save();
   ctx.fillStyle = color;
   ctx.font = "bold 12px 'Segoe UI', sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.translate(centerX, baseY + 35);
-  ctx.rotate(padAngle);
-  ctx.fillText(`Flare Angle ${value.toFixed(1)}°`, 0, 0);
+  ctx.translate(origin.x + Math.cos(bisector) * labelDist, origin.y + Math.sin(bisector) * labelDist);
+  ctx.rotate(uprightAngle(textAcross ? bisector - Math.PI / 2 : bisector));
+  ctx.fillText(text, 0, 0);
   ctx.restore();
 }
 
@@ -812,13 +766,15 @@ function drawNoseOverlay(ctx, metrics) {
   }
 
   // Pad angle (blue in reference)
-  if (Number.isFinite(metrics.padAngleDeg) && metrics.padAngleLines) {
-    drawPadAngleBox(ctx, metrics.padAngleLines, metrics.padAngleDeg, colors.padAngle);
+  if (Number.isFinite(metrics.padAngleDeg)) {
+    drawAngleBox(ctx, metrics.padAngleLines, `Pad Angle ${metrics.padAngleDeg.toFixed(1)}°`,
+      colors.padAngle, { radius: 20, labelDist: 45 });
   }
 
   // Flare angle (magenta in reference)
   if (Number.isFinite(metrics.flareAngleDeg)) {
-    drawFlareAngleBox(ctx, pad, metrics.flareAngleDeg, colors.flareAngle);
+    drawAngleBox(ctx, metrics.flareAngleLines, `Flare Angle ${metrics.flareAngleDeg.toFixed(1)}°`,
+      colors.flareAngle, { radius: 25, labelDist: 60, textAcross: true });
   }
 }
 

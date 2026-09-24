@@ -6,13 +6,19 @@ Demo: https://shameem4.github.io/headSize/
 
 ## What it measures
 
-- **Camera distance** — from apparent iris size (assumes an 11.7 mm iris)
-- **IPD** — pupil-to-pupil distance (near, and far = near × 1.05)
+- **Camera distance** — from apparent iris size
+- **IPD** — pupil to pupil. *Near* is measured while you look at the screen; *far* corrects for your eyes converging on it (≈ +2% at 50 cm).
 - **Face width** — landmarks 127 ↔ 356
-- **Eye widths** — landmarks 35 ↔ 244 and 464 ↔ 265
+- **Eye widths** — eye corner to eye corner (33 ↔ 133, 362 ↔ 263)
 - **Nose** — bridge width, pad width, pad height, pad angle, flare angle
 
-Millimetre values are scaled from the iris: `mm per px = 11.7 / iris diameter in px`.
+### How
+
+1. The iris is assumed to be 11.7 mm across. Its size in video pixels gives the mm-per-pixel scale at the eyes and, with an assumed ~64° field of view, the distance to the camera.
+2. Each landmark is back-projected to 3D millimetres using MediaPipe's relative depth, so points in front of or behind the eyes are scaled correctly and turning or tilting the head doesn't shrink measurements.
+3. Lengths are 3D distances; pad height and the angles are taken in the face's frontal plane.
+
+Accuracy limits: real irises vary (~11–12.5 mm), which scales every mm value by the same factor; distance also depends on the field-of-view guess. The depth correction is only as good as MediaPipe's per-landmark depth.
 
 ## Views
 

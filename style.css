@@ -181,3 +181,19 @@ input[type="range"] {
   accent-color: #00ffc8;
   cursor: pointer;
 }
+/* Narrow screens: stack video above the panel and let the page scroll */
+@media (max-width: 1000px) {
+  body {
+    display: block;
+    overflow: auto;
+  }
+
+  .app {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .videoView {
+    height: 60vh;
+  }
+}

@@ -11,13 +11,10 @@ import {
   COLOR_CONFIG,
   IPD_OVERLAY_CONFIG,
 } from "./config.js";
-import { estimateCameraDistanceCm, createHeadTracker, StateManager } from "./measure.js";
+import { createMeasurer } from "./measure.js";
 import { CameraManager, ModelManager } from "./camera.js";
 import { createGraphics } from "./overlay-2d.js";
 import { createGraphics3D } from "./overlay-3d.js";
-
-const IRIS_DIAMETER_MM = CAMERA_CONFIG.irisDiameterMm;
-const FOCAL_LENGTH_PX = CAMERA_CONFIG.focalLengthScale();
 
 // DOM
 const video = document.getElementById("webcam");
@@ -29,15 +26,13 @@ const threejsControls = document.getElementById("threejs_controls");
 const metricsPanelBody = document.getElementById("metrics_panel_body");
 
 // Modules
-const state = new StateManager(CAMERA_CONFIG);
+const measurer = createMeasurer(CAMERA_CONFIG, HEAD_CONFIG);
 const camera = new CameraManager(video, CAMERA_CONFIG);
-const head = createHeadTracker(HEAD_CONFIG);
 const graphics = createGraphics(ctx);
 const graphics3D = createGraphics3D(canvas3D);
 
 // Application state
 let models;
-let lastLandmarks = null;
 let currentRenderMode = UI_CONFIG.renderMode;
 
 // ============================================================================
@@ -78,6 +73,8 @@ function resizeDisplayToContainer() {
   canvas2D.width = Math.round(w * dpr);
   canvas2D.height = Math.round(h * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  graphics3D.handleResize(w, h);
 }
 
 const fmt = (v, unit) => (v == null || !Number.isFinite(v) ? "--" : `${v.toFixed(1)}${unit}`);
@@ -93,20 +90,21 @@ function metricCard(title, rows) {
   return `<div class="metric-card"><h2>${title}</h2>${rows.join("")}</div>`;
 }
 
+let lastPanelHtml = "";
+
 /**
- * Render the metrics panel
- * @param {Object} m - Measurement state
- * @param {number|null} distanceCm - Camera distance in centimeters
+ * Render the metrics panel (only touches the DOM when values change)
+ * @param {Object} m - Measurements
  */
-function renderMetricsPanel(m, distanceCm) {
+function renderMetricsPanel(m) {
   const nose = m.nose || {};
   const noseColors = COLOR_CONFIG.noseMetrics;
   const ipdRows = m.ipd
     ? IPD_OVERLAY_CONFIG.rails.map(({ key, label }) => metricRow(label, mm(m.ipd[key]), COLOR_CONFIG.ipd[key]))
     : [metricRow("Values", "--")];
 
-  metricsPanelBody.innerHTML = [
-    metricCard("Camera", [metricRow("Distance", fmt(distanceCm, " cm"))]),
+  const html = [
+    metricCard("Camera", [metricRow("Distance", fmt(m.distanceCm, " cm"))]),
     metricCard("Face", [metricRow("Width", mm(m.faceWidth?.valueMm))]),
     metricCard("Eyes", [
       metricRow("Left width", mm(m.eyes?.left?.valueMm)),
@@ -121,57 +119,32 @@ function renderMetricsPanel(m, distanceCm) {
       metricRow("Flare angle", deg(nose.flareAngleDeg), noseColors.flareAngle),
     ]),
   ].join("");
+
+  if (html !== lastPanelHtml) {
+    metricsPanelBody.innerHTML = html;
+    lastPanelHtml = html;
+  }
 }
 
 // ============================================================================
 // RENDER LOOP
 // ============================================================================
 
-/**
- * Process face landmarks and update head tracking
- * @param {Object} faceResults - Face detection results from MediaPipe
- * @returns {number|null} Camera distance for this frame in cm
- */
-function processFaceLandmarks(faceResults) {
-  if (!faceResults?.faceLandmarks) {
-    head.reset();
-    lastLandmarks = null;
-    return null;
-  }
-
-  // numFaces is 1; an empty list (face lost) keeps the last head state
-  const landmarks = faceResults.faceLandmarks[0];
-  if (!landmarks) return null;
-
-  const { width, height } = getCanvasDisplaySize();
-  lastLandmarks = camera.applyMirrorIfEnabled(landmarks);
-  head.update(lastLandmarks, width, height, (d) =>
-    estimateCameraDistanceCm(d, FOCAL_LENGTH_PX, IRIS_DIAMETER_MM)
-  );
-  return head.getAverageCameraDistance();
-}
-
 function renderFrame() {
   const { faceResults } = models.processFrame(video);
-  const frameDistanceCm = processFaceLandmarks(faceResults);
+  const raw = faceResults?.faceLandmarks?.[0];
+  const landmarks = raw ? camera.applyMirrorIfEnabled(raw) : null;
+  const display = getCanvasDisplaySize();
 
-  // Update distance with smoothing
-  if (Number.isFinite(frameDistanceCm)) {
-    state.updateDistance(frameDistanceCm);
-  } else {
-    state.decayDistance();
-  }
-
-  state.updateMeasurements(head, IRIS_DIAMETER_MM);
-  renderMetricsPanel(state.getMeasurements(), state.getSmoothedDistance());
+  const m = measurer.update(landmarks, { width: video.videoWidth, height: video.videoHeight }, display);
+  renderMetricsPanel(m);
 
   ctx.clearRect(0, 0, canvas2D.width, canvas2D.height);
   if (currentRenderMode === "canvas2d") {
     graphics.beginFrame();
-    graphics.drawMeasurementOverlays(state.getMeasurements());
-  } else if (lastLandmarks) {
-    const { width, height } = getCanvasDisplaySize();
-    graphics3D.updateFaceMesh(lastLandmarks, width, height);
+    graphics.drawMeasurementOverlays(m);
+  } else {
+    graphics3D.updateFaceMesh(landmarks, display.width, display.height);
     graphics3D.render();
   }
 
@@ -237,8 +210,6 @@ function setupControls() {
     "loadedmetadata",
     () => {
       resizeDisplayToContainer();
-      const { width, height } = getCanvasDisplaySize();
-      graphics3D.handleResize(width, height);
       renderFrame();
     },
     { once: true }

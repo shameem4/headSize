@@ -36,22 +36,16 @@ export const CAMERA_CONFIG = {
   // Physical measurements
   irisDiameterMm: 11.7,    // Average human iris diameter in millimeters
 
-  // Focal length calculation
-  defaultNorm: { x: 0.8, y: 1.4 },
-  focalLengthScale() {
-    return {
-      x: this.videoSize.width * this.defaultNorm.x,
-      y: this.videoSize.height * this.defaultNorm.y,
-    };
-  },
+  // Focal length as a fraction of video width (0.8 ≈ 64° horizontal FOV, a
+  // typical webcam). Only affects distance; mm values barely depend on it.
+  focalLengthNorm: 0.8,
 
-  // Distance estimation
-  distanceSmoothing: 0.18,           // Exponential smoothing factor (0-1)
-  distanceVisibilityTimeout: 1200,   // Hide distance after ms of inactivity
+  // Exponential smoothing of iris diameter (0-1, higher = faster response)
+  irisSmoothing: 0.3,
 
-  // Iris measurement stabilization (reduces jitter in measurements)
-  irisSmoothing: 0.3,               // Exponential smoothing for iris diameter (0.1-0.3 recommended)
-  irisStabilizationThreshold: 1,   // Ignore changes smaller than this many pixels
+  // Pupil-to-eye-rotation-center distance, used to convert the measured
+  // (converged) IPD to far IPD
+  eyeRotationRadiusMm: 10,
 };
 
 // ============================================================================
@@ -63,41 +57,32 @@ export const CAMERA_CONFIG = {
  * Reference: https://developers.google.com/mediapipe/solutions/vision/face_landmarker
  */
 export const HEAD_CONFIG = {
-  // Nose grid for detailed nose measurements (row order matters)
-  noseGridIndices: {
-    topRow: [105, 66, 107, 9, 336, 296, 334],
-    browRow: [52, 65, 55, 8, 285, 295, 282],
-    bridgeRow: [190, 189, 193, 168, 417, 413, 414],
-    padRow: [114, 188, 122, 6, 351, 412, 343],
-    underpadRow: [217, 174, 196, 197, 419, 399, 437],
-    flareRow1: [198, 236, 3, 195, 248, 456, 420],
-    flareRow2: [131, 134, 51, 5, 281, 363, 360],
-    tipRow: [115, 220, 45, 4, 275, 440, 344],
-  },
-
-  // Face width measurement points
-  faceWidthIdx: {
-    left: 127,   // Left edge of face
-    right: 356,  // Right edge of face
-  },
-
-  // Eye width measurement points
-  eyeWidthIdx: {
-    left: [35, 244],    // Left eye corners
-    right: [464, 265],  // Right eye corners
-  },
-
-  // Iris and pupil landmarks for IPD and distance
+  // Iris boundary points and pupil centers (subject's left/right)
   iris: {
-    left: {
-      iris: [474, 475, 476, 477],  // Left iris boundary points
-      pupil: 473,                   // Left pupil center
-    },
-    right: {
-      iris: [469, 470, 471, 472],  // Right iris boundary points
-      pupil: 468,                   // Right pupil center
-    },
+    left: [474, 475, 476, 477],
+    right: [469, 470, 471, 472],
   },
+  pupil: { left: 473, right: 468 },
+
+  // Eye corners, ordered from the subject's right to left
+  eyeCorners: {
+    left: [362, 263],
+    right: [33, 133],
+  },
+
+  // Face edges [right, left]
+  faceWidth: [127, 356],
+
+  // Chin -> forehead, defines the face's vertical axis
+  faceUp: [152, 10],
+
+  // Nose rows, ordered across the nose
+  bridgeRow: [190, 189, 193, 168, 417, 413, 414],
+  padRow: [114, 188, 122, 6, 351, 412, 343],
+
+  // Angles as [vertex, armA, armB]
+  padAngle: [8, 412, 6],
+  flareAngle: [6, 122, 351],
 };
 
 // ============================================================================

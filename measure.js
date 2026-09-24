@@ -1,766 +1,212 @@
 /**
- * Measurement pipeline: landmarks -> iris scale -> mm measurements
+ * Measurement pipeline: landmarks -> iris scale -> 3D points -> mm measurements
  * @module measure
+ *
+ * 1. Fit a circle to each iris (video pixels) and smooth the average diameter.
+ * 2. The iris is assumed to be irisDiameterMm wide, which gives the mm-per-pixel
+ *    scale at the eyes and the eye-to-camera distance (pinhole model).
+ * 3. Each landmark is back-projected to 3D millimetres using MediaPipe's
+ *    relative depth (z), so points in front of or behind the eyes are scaled
+ *    correctly and measurements don't shrink when the head turns or tilts.
+ * 4. Lengths are 3D distances; heights and angles are taken in the face's
+ *    frontal plane.
  */
 
-
 /** @typedef {{x: number, y: number}} Point */
+/** @typedef {[number, number, number]} Vec3 */
 
-/** @typedef {{center: Point, radius: number}} Circle */
+// ============================================================================
+// GEOMETRY
+// ============================================================================
 
 const EPSILON = 1e-3;
 
-/**
- * Calculate Euclidean distance between two points
- * @param {Point} a - First point
- * @param {Point} b - Second point
- * @returns {number} Distance in pixels
- */
-function distanceBetweenPoints(a, b) {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return Math.hypot(dx, dy);
-}
-
-/**
- * Create a circle from two points (diameter)
- * @param {Point} p1 - First point
- * @param {Point} p2 - Second point
- * @returns {Circle} Circle with center at midpoint
- */
 function circleFromTwoPoints(p1, p2) {
   return {
     center: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 },
-    radius: distanceBetweenPoints(p1, p2) / 2,
+    radius: Math.hypot(p1.x - p2.x, p1.y - p2.y) / 2,
   };
 }
 
-/**
- * Create a circle passing through three points (circumcircle)
- * @param {Point} p1 - First point
- * @param {Point} p2 - Second point
- * @param {Point} p3 - Third point
- * @returns {Circle|null} Circumcircle or null if points are collinear
- */
 function circleFromThreePoints(p1, p2, p3) {
-  const d =
-    2 *
-    (p1.x * (p2.y - p3.y) +
-      p2.x * (p3.y - p1.y) +
-      p3.x * (p1.y - p2.y));
+  const d = 2 * (p1.x * (p2.y - p3.y) + p2.x * (p3.y - p1.y) + p3.x * (p1.y - p2.y));
   if (Math.abs(d) < EPSILON) return null;
-
-  const ux =
-    ((p1.x ** 2 + p1.y ** 2) * (p2.y - p3.y) +
-      (p2.x ** 2 + p2.y ** 2) * (p3.y - p1.y) +
-      (p3.x ** 2 + p3.y ** 2) * (p1.y - p2.y)) /
-    d;
-  const uy =
-    ((p1.x ** 2 + p1.y ** 2) * (p3.x - p2.x) +
-      (p2.x ** 2 + p2.y ** 2) * (p1.x - p3.x) +
-      (p3.x ** 2 + p3.y ** 2) * (p2.x - p1.x)) /
-    d;
-  const center = { x: ux, y: uy };
-  return {
-    center,
-    radius: distanceBetweenPoints(center, p1),
+  const s1 = p1.x ** 2 + p1.y ** 2;
+  const s2 = p2.x ** 2 + p2.y ** 2;
+  const s3 = p3.x ** 2 + p3.y ** 2;
+  const center = {
+    x: (s1 * (p2.y - p3.y) + s2 * (p3.y - p1.y) + s3 * (p1.y - p2.y)) / d,
+    y: (s1 * (p3.x - p2.x) + s2 * (p1.x - p3.x) + s3 * (p2.x - p1.x)) / d,
   };
+  return { center, radius: Math.hypot(center.x - p1.x, center.y - p1.y) };
 }
 
-/**
- * Check if a point is inside or on a circle
- * @param {Point} point - Point to test
- * @param {Circle|null} circle - Circle to test against
- * @returns {boolean} True if point is inside or on circle boundary
- */
 function isPointInsideCircle(point, circle) {
-  if (!circle) return false;
-  return distanceBetweenPoints(point, circle.center) <= circle.radius + EPSILON;
+  return Math.hypot(point.x - circle.center.x, point.y - circle.center.y) <= circle.radius + EPSILON;
 }
 
 /**
- * Compute the minimum enclosing circle for a set of points using Welzl's algorithm
- * @param {Point[]} points - Array of points
- * @returns {Circle|null} Minimum enclosing circle or null if no points
+ * Minimum enclosing circle (Welzl-style incremental algorithm)
+ * @param {Point[]} points
+ * @returns {{center: Point, radius: number}|null}
  */
 function minEnclosingCircle(points) {
-  if (!points?.length) return null;
   let circle = null;
-
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
     if (circle && isPointInsideCircle(p, circle)) continue;
-
     circle = { center: { ...p }, radius: 0 };
     for (let j = 0; j < i; j++) {
       const q = points[j];
       if (isPointInsideCircle(q, circle)) continue;
-
       circle = circleFromTwoPoints(p, q);
       for (let k = 0; k < j; k++) {
         const r = points[k];
         if (isPointInsideCircle(r, circle)) continue;
-
-        const candidate = circleFromThreePoints(p, q, r);
-        if (candidate) circle = candidate;
+        circle = circleFromThreePoints(p, q, r) || circle;
       }
     }
   }
   return circle;
 }
 
-// ============================================================================
-// CONVERSION UTILITIES
-// ============================================================================
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const normalize3 = (v) => {
+  const len = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / len, v[1] / len, v[2] / len];
+};
 
-export function estimateCameraDistanceCm(diameterPx, focalLengthPx, irisDiameterMm) {
-  if (!(diameterPx > 0)) return null;
-  const mmPerPx = irisDiameterMm / diameterPx;
-  const distanceX = (focalLengthPx.x * mmPerPx) / 10;
-  const distanceY = (focalLengthPx.y * mmPerPx) / 10;
-  return (distanceX + distanceY) / 2;
+/** Unsigned angle at vertex o between a and b, in degrees (2D) */
+function angleDeg(o, a, b) {
+  const ux = a.x - o.x, uy = a.y - o.y, vx = b.x - o.x, vy = b.y - o.y;
+  const mag = Math.hypot(ux, uy) * Math.hypot(vx, vy);
+  if (!mag) return null;
+  return (Math.acos(Math.max(-1, Math.min(1, (ux * vx + uy * vy) / mag))) * 180) / Math.PI;
 }
 
 // ============================================================================
-// PROJECTION UTILITIES
-// ============================================================================
-
-function projectLandmark(landmarks, index, canvasWidth, canvasHeight) {
-  const lm = landmarks?.[index];
-  if (!lm) return null;
-  return {
-    x: lm.x * canvasWidth,
-    y: lm.y * canvasHeight,
-  };
-}
-
-function buildLandmarkPair(landmarks, indexMap, canvasWidth, canvasHeight) {
-  if (!landmarks || !indexMap) return null;
-  const entries = Object.entries(indexMap);
-  const result = {};
-  for (const [key, idx] of entries) {
-    const point = projectLandmark(landmarks, idx, canvasWidth, canvasHeight);
-    if (!point) return null;
-    result[key] = point;
-  }
-  return result;
-}
-
-function buildNoseGridPoints(landmarks, noseIndices, canvasWidth, canvasHeight) {
-  const grid = {};
-  for (const [key, row] of Object.entries(noseIndices)) {
-    grid[key] = row.map((idx) => projectLandmark(landmarks, idx, canvasWidth, canvasHeight));
-  }
-  return grid;
-}
-
-// ============================================================================
-// MEASUREMENT BUILDERS - OPTIMIZED
+// MEASURER
 // ============================================================================
 
 /**
- * Compute row metrics with single-pass optimization
- * OPTIMIZED: Single loop instead of filter + forEach
+ * Screen-space summary of a landmark row, for drawing brackets
+ * @param {Point[]} points
  */
-function computeRowMetrics(rowPoints) {
-  if (!rowPoints) return null;
-
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let sumY = 0;
-  let leftPt = null;
-  let rightPt = null;
-  let validCount = 0;
-
-  // Single pass through array
-  for (let i = 0; i < rowPoints.length; i++) {
-    const pt = rowPoints[i];
-    if (!pt) continue;
-
-    validCount++;
-    sumY += pt.y;
-
-    if (pt.x < minX) {
-      minX = pt.x;
-      leftPt = pt; // Direct reference, no object creation
-    }
-    if (pt.x > maxX) {
-      maxX = pt.x;
-      rightPt = pt;
-    }
+function rowDrawData(points) {
+  let left = points[0];
+  let right = points[0];
+  for (const p of points) {
+    if (p.x < left.x) left = p;
+    if (p.x > right.x) right = p;
   }
-
-  if (validCount < 2) return null;
-
-  return {
-    widthPx: maxX - minX,
-    midY: sumY / validCount,
-    left: leftPt,
-    right: rightPt,
-  };
+  const midY = points.reduce((s, p) => s + p.y, 0) / points.length;
+  return { left, right, midY };
 }
 
 /**
- * Calculate angle between two vectors (optimized)
- * OPTIMIZED: Inlined to avoid function call overhead
+ * Create a stateful measurer (holds the smoothed iris diameter)
+ * @param {Object} camera - CAMERA_CONFIG
+ * @param {Object} lm - HEAD_CONFIG landmark indices
  */
-function calculateAngleDeg(vecA, vecB) {
-  const magA = Math.hypot(vecA.x, vecA.y);
-  const magB = Math.hypot(vecB.x, vecB.y);
+export function createMeasurer(camera, lm) {
+  let smoothedIrisPx = null;
 
-  if (!magA || !magB) return null;
-
-  // Clamp cosTheta to [-1, 1] to avoid NaN from acos
-  const cosTheta = (vecA.x * vecB.x + vecA.y * vecB.y) / (magA * magB);
-  const clamped = Math.max(-1, Math.min(1, cosTheta));
-  const theta = Math.acos(clamped);
-
-  return (theta * 180) / Math.PI;
-}
-
-/**
- * Compute nose metrics with optimizations
- * OPTIMIZED: Removed IIFEs, cached calculations, single-pass logic
- */
-function computeNoseMetrics(gridPoints, mmPerPx) {
-  // Early validation
-  if (!gridPoints || !Number.isFinite(mmPerPx) || mmPerPx <= 0) return null;
-
-  // Extract rows
-  const bridgeRow = computeRowMetrics(gridPoints.bridgeRow);
-  const padRow = computeRowMetrics(gridPoints.padRow);
-  const tipRow = computeRowMetrics(gridPoints.tipRow);
-
-  if (!bridgeRow || !padRow) return null;
-
-  // Basic measurements (optimized: direct multiplication)
-  const bridgeWidthMm = bridgeRow.widthPx * mmPerPx;
-  const padSpanMm = padRow.widthPx * mmPerPx;
-  const padHeightMm = Math.abs(padRow.midY - bridgeRow.midY) * mmPerPx;
-
-  // Get ordered rows for angle calculations
-  const orderedRows = Object.values(gridPoints);
-  const rowCount = orderedRows.length;
-
-  // Find column reference and midpoint
-  const columnReference = orderedRows.find((row) => Array.isArray(row));
-  const columnCount = columnReference?.length || 0;
-  const midColumn = Math.floor(columnCount / 2);
-
-  // Helper to get point from grid
-  const getColumnPoint = (rowIdx, colIdx) => {
-    const row = orderedRows[rowIdx];
-    if (!Array.isArray(row) || colIdx < 0 || colIdx >= row.length) return null;
-    return row[colIdx];
-  };
-
-  // Find top and bottom mid points (single loop)
-  let topMid = null;
-  let bottomMid = null;
-  let topMidRow = 0;
-  const maxRow = Math.min(rowCount - 1, 3);
-
-  for (let r = 1; r <= maxRow; r++) {
-    const pt = getColumnPoint(r, midColumn);
-    if (!pt) continue;
-
-    if (!topMid) {
-      topMid = pt;
-      topMidRow = r;
-    }
-    bottomMid = pt;
-  }
-
-  // Find diagonal point
-  let diagPoint = topMid;
-  if (topMid) {
-    let diagCol = midColumn;
-    for (let r = topMidRow + 1; r <= maxRow; r++) {
-      diagCol++;
-      const candidate = getColumnPoint(r, diagCol);
-      if (!candidate) break;
-      diagPoint = candidate;
-    }
-  }
-
-  // Calculate pad angle (optimized: no IIFE, direct calculation)
-  let padAngleDeg = null;
-  let padAngleLines = null;
-
-  if (topMid && bottomMid && diagPoint) {
-    const vecA = {
-      x: bottomMid.x - topMid.x,
-      y: bottomMid.y - topMid.y
-    };
-    const vecB = {
-      x: diagPoint.x - topMid.x,
-      y: diagPoint.y - topMid.y
-    };
-
-    padAngleDeg = calculateAngleDeg(vecA, vecB);
-    padAngleLines = {
-      origin: topMid,
-      lineAEnd: diagPoint,
-      lineBEnd: bottomMid,
-    };
-  }
-
-  // Calculate flare angle (optimized: cached array access)
-  let flareAngleDeg = null;
-  const padRowPoints = Array.isArray(gridPoints.padRow) ? gridPoints.padRow : [];
-
-  if (padRowPoints.length > 2) {
-    const midIdx = Math.floor(padRowPoints.length / 2);
-    const center = padRowPoints[midIdx];
-    const left = padRowPoints[midIdx - 1];
-    const right = padRowPoints[midIdx + 1];
-
-    if (center && left && right) {
-      const leftVec = {
-        x: left.x - center.x,
-        y: left.y - center.y
-      };
-      const rightVec = {
-        x: right.x - center.x,
-        y: right.y - center.y
-      };
-
-      flareAngleDeg = calculateAngleDeg(leftVec, rightVec);
-    }
-  }
-
-  return {
-    bridgeWidthMm,
-    padSpanMm,
-    padHeightMm,
-    padAngleDeg,
-    padAngleLines,
-    flareAngleDeg,
-    rows: {
-      bridge: bridgeRow,
-      pad: padRow,
-      tip: tipRow,
-    },
-  };
-}
-
-/**
- * Extract eye segment (optimized: cached calculations)
- */
-function extractEyeSegment(landmarks, idxPair, canvasWidth, canvasHeight) {
-  const a = landmarks[idxPair[0]];
-  const b = landmarks[idxPair[1]];
-  if (!a || !b) return null;
-
-  const ax = a.x * canvasWidth;
-  const ay = a.y * canvasHeight;
-  const bx = b.x * canvasWidth;
-  const by = b.y * canvasHeight;
-
-  return {
-    pxLength: Math.hypot(ax - bx, ay - by),
-    points: [
-      { x: ax, y: ay },
-      { x: bx, y: by },
-    ],
-  };
-}
-
-/**
- * Build IPD measurement (optimized: Math.hypot instead of manual sqrt)
- */
-function buildIpdMeasurement(leftIris, rightIris, mmPerPx) {
-  if (!leftIris || !rightIris || !Number.isFinite(mmPerPx)) return null;
-
-  const dxPx = rightIris.center.x - leftIris.center.x;
-  const dyPx = rightIris.center.y - leftIris.center.y;
-  const pupilDistancePx = Math.hypot(dxPx, dyPx); // OPTIMIZED: Use Math.hypot
-
-  const near = pupilDistancePx * mmPerPx;
-  const far = near * 1.05;
-
-  return {
-    near,
-    far,
-    left: { x: leftIris.center.x, y: leftIris.center.y },
-    right: { x: rightIris.center.x, y: rightIris.center.y },
-  };
-}
-
-/**
- * Build face width measurement (optimized: removed unnecessary spread)
- */
-function buildFaceWidthMeasurement(points, mmPerPx) {
-  if (!points?.left || !points?.right || !Number.isFinite(mmPerPx)) return null;
-
-  const faceWidthPx = Math.hypot(
-    points.right.x - points.left.x,
-    points.right.y - points.left.y
-  );
-  const faceWidthMm = faceWidthPx * mmPerPx;
-
-  if (!Number.isFinite(faceWidthMm) || faceWidthMm <= 0) return null;
-
-  return {
-    valueMm: faceWidthMm,
-    left: points.left,   // OPTIMIZED: Direct reference instead of spread
-    right: points.right,
-  };
-}
-
-/**
- * Build eye width measurement (optimized: removed unnecessary map spread)
- */
-function buildEyeWidthMeasurement(segment, mmPerPx) {
-  if (!segment?.pxLength || !Number.isFinite(mmPerPx)) return null;
-
-  return {
-    valueMm: segment.pxLength * mmPerPx,
-    points: segment.points, // OPTIMIZED: Direct reference
-  };
-}
-
-/**
- * Compute iris measurement (optimized: reduced allocations)
- */
-function computeIrisMeasurement(landmarks, irisIdx, pupilIdx, canvasWidth, canvasHeight) {
-  const pupil = landmarks?.[pupilIdx];
-  if (!pupil || !Array.isArray(irisIdx) || irisIdx.length !== 4) return null;
-
-  // OPTIMIZED: Pre-allocate array with known size
-  const irisPts = new Array(4);
-  let validCount = 0;
-
-  for (let i = 0; i < 4; i++) {
-    const pt = landmarks[irisIdx[i]];
-    if (!pt) return null; // Early exit if any point missing
-
-    irisPts[validCount++] = {
-      x: pt.x * canvasWidth,
-      y: pt.y * canvasHeight,
-    };
-  }
-
-  const circle = minEnclosingCircle(irisPts);
-  if (!circle || circle.radius <= 0) return null;
-
-  return {
-    diameterPx: circle.radius * 2,
-    center: {
-      x: circle.center.x,
-      y: circle.center.y,
-    },
-  };
-}
-
-class NoseComponent {
-  constructor(indices) {
-    this.indices = indices;
-    this.grid = null;
-  }
-
-  reset() {
-    this.grid = null;
-  }
-
-  update(landmarks, canvasWidth, canvasHeight) {
+  /**
+   * Measure one frame
+   * @param {Array|null} landmarks - MediaPipe normalized landmarks (already mirrored for display)
+   * @param {{width: number, height: number}} videoSize - Video resolution in pixels
+   * @param {{width: number, height: number}} displaySize - On-screen canvas size (for drawing points)
+   * @returns {Object} measurements (all null when no face)
+   */
+  function update(landmarks, videoSize, displaySize) {
+    const empty = { distanceCm: null, ipd: null, faceWidth: null, eyes: { left: null, right: null }, nose: null };
     if (!landmarks) {
-      this.reset();
-      return;
+      smoothedIrisPx = null;
+      return empty;
     }
-    this.grid = buildNoseGridPoints(landmarks, this.indices, canvasWidth, canvasHeight);
-  }
-}
 
-class FaceComponent {
-  constructor(indexMap) {
-    this.indexMap = indexMap;
-    this.widthPoints = null;
-  }
+    const { width: vw, height: vh } = videoSize;
+    const screen = (i) => ({ x: landmarks[i].x * displaySize.width, y: landmarks[i].y * displaySize.height });
 
-  reset() {
-    this.widthPoints = null;
-  }
+    // 1. Iris diameter in video pixels, averaged over both eyes and smoothed
+    const irisPx = (indices) =>
+      minEnclosingCircle(indices.map((i) => ({ x: landmarks[i].x * vw, y: landmarks[i].y * vh })))?.radius * 2;
+    const rawIrisPx = (irisPx(lm.iris.left) + irisPx(lm.iris.right)) / 2;
+    if (!(rawIrisPx > 0)) return empty;
+    smoothedIrisPx =
+      smoothedIrisPx === null
+        ? rawIrisPx
+        : smoothedIrisPx + (rawIrisPx - smoothedIrisPx) * camera.irisSmoothing;
 
-  update(landmarks, canvasWidth, canvasHeight) {
-    if (!landmarks) {
-      this.reset();
-      return;
-    }
-    this.widthPoints = buildLandmarkPair(landmarks, this.indexMap, canvasWidth, canvasHeight);
-  }
-}
+    // 2. Scale and distance at the eyes
+    const mmPerPx = camera.irisDiameterMm / smoothedIrisPx;
+    const focalPx = camera.focalLengthNorm * vw;
+    const eyeDistMm = focalPx * mmPerPx;
 
-class EyeSide {
-  constructor({ iris, widthIdx }) {
-    this.irisIndices = iris;
-    this.widthIdx = widthIdx;
-    this.iris = null;
-    this.segment = null;
-    this.smoothedDiameter = null;
-    this.smoothingFactor = 0.3; // Lower = smoother but slower response (0.2-0.4 recommended)
-  }
-
-  reset() {
-    this.iris = null;
-    this.segment = null;
-    this.smoothedDiameter = null;
-  }
-
-  update(landmarks, canvasWidth, canvasHeight, estimateDistanceFn) {
-    if (!landmarks) {
-      this.reset();
-      return;
-    }
-    const rawMeasurement = computeIrisMeasurement(
-      landmarks,
-      this.irisIndices.iris,
-      this.irisIndices.pupil,
-      canvasWidth,
-      canvasHeight
-    );
-
-    if (rawMeasurement && rawMeasurement.diameterPx > 0) {
-      // Apply exponential moving average smoothing to diameter
-      if (this.smoothedDiameter === null) {
-        this.smoothedDiameter = rawMeasurement.diameterPx;
-      } else {
-        this.smoothedDiameter =
-          this.smoothingFactor * rawMeasurement.diameterPx +
-          (1 - this.smoothingFactor) * this.smoothedDiameter;
+    // 3. Back-project landmarks to 3D mm (camera frame). MediaPipe z is depth
+    //    in the same units as x (fraction of image width), relative to the head.
+    const zEyes = (landmarks[lm.pupil.left].z + landmarks[lm.pupil.right].z) / 2;
+    const cache = new Map();
+    const p3 = (i) => {
+      let p = cache.get(i);
+      if (!p) {
+        const l = landmarks[i];
+        const depth = eyeDistMm + (l.z - zEyes) * vw * mmPerPx;
+        p = [((l.x - 0.5) * vw * depth) / focalPx, ((l.y - 0.5) * vh * depth) / focalPx, depth];
+        cache.set(i, p);
       }
+      return p;
+    };
+    const len = (a, b) => dist3(p3(a), p3(b));
 
-      // Calculate distance from smoothed diameter
-      const distanceCm = estimateDistanceFn(this.smoothedDiameter);
+    // Face frame: x across the face, y up the face (for frontal heights/angles)
+    const xAxis = normalize3(sub(p3(lm.faceWidth[1]), p3(lm.faceWidth[0])));
+    const up = sub(p3(lm.faceUp[1]), p3(lm.faceUp[0]));
+    const yAxis = normalize3(sub(up, xAxis.map((c) => c * dot(up, xAxis))));
+    const frontal = (i) => ({ x: dot(p3(i), xAxis), y: dot(p3(i), yAxis) });
+    const frontalAngle = ([o, a, b]) => angleDeg(frontal(o), frontal(a), frontal(b));
+    const rowCenterY = (row) => row.reduce((s, i) => s + frontal(i).y, 0) / row.length;
 
-      // Return measurement with smoothed diameter and calculated distance
-      this.iris = {
-        ...rawMeasurement,
-        diameterPx: this.smoothedDiameter,
-        distanceCm
-      };
-    } else {
-      this.iris = rawMeasurement;
-    }
-    this.segment = extractEyeSegment(landmarks, this.widthIdx, canvasWidth, canvasHeight);
-  }
-}
+    // 4. Measurements
+    const ipdNear = len(lm.pupil.left, lm.pupil.right);
+    // Eyes converge on the camera, pulling each pupil inward by ~r·(PD/2)/D
+    const ipdFar = ipdNear / (1 - camera.eyeRotationRadiusMm / eyeDistMm);
 
-class EyesComponent {
-  constructor(config) {
-    this.left = new EyeSide({ iris: config.leftIris, widthIdx: config.leftWidthIdx });
-    this.right = new EyeSide({ iris: config.rightIris, widthIdx: config.rightWidthIdx });
-  }
+    const eye = (corners) => ({ valueMm: len(corners[0], corners[1]), points: corners.map(screen) });
+    const angleLines = ([o, a, b]) => ({ origin: screen(o), lineAEnd: screen(a), lineBEnd: screen(b) });
+    const { bridgeRow, padRow } = lm;
 
-  reset() {
-    this.left.reset();
-    this.right.reset();
-  }
-
-  update(landmarks, canvasWidth, canvasHeight, estimateDistanceFn) {
-    this.left.update(landmarks, canvasWidth, canvasHeight, estimateDistanceFn);
-    this.right.update(landmarks, canvasWidth, canvasHeight, estimateDistanceFn);
-  }
-}
-
-class HeadComponent {
-  constructor({ noseGridIndices, faceWidthIdx, eyeWidthIdx, iris }) {
-    this.nose = new NoseComponent(noseGridIndices);
-    this.face = new FaceComponent(faceWidthIdx);
-    this.eyes = new EyesComponent({
-      leftIris: iris.left,
-      rightIris: iris.right,
-      leftWidthIdx: eyeWidthIdx.left,
-      rightWidthIdx: eyeWidthIdx.right,
-    });
-  }
-
-  reset() {
-    this.nose.reset();
-    this.face.reset();
-    this.eyes.reset();
-  }
-
-  update(landmarks, canvasWidth, canvasHeight, estimateDistanceFn) {
-    if (!landmarks) {
-      this.reset();
-      return;
-    }
-    this.nose.update(landmarks, canvasWidth, canvasHeight);
-    this.face.update(landmarks, canvasWidth, canvasHeight);
-    this.eyes.update(landmarks, canvasWidth, canvasHeight, estimateDistanceFn);
-  }
-
-  getAverageCameraDistance() {
-    const left = this.eyes.left.iris;
-    const right = this.eyes.right.iris;
-    if (left?.distanceCm && right?.distanceCm) {
-      return (left.distanceCm + right.distanceCm) / 2;
-    }
-    return null;
-  }
-}
-
-export function createHeadTracker(config) {
-  return new HeadComponent(config);
-}
-
-/**
- * @typedef {Object} MeasurementState
- * @property {Object|null} ipd - IPD measurements (near, far)
- * @property {Object|null} faceWidth - Face width measurement
- * @property {Object} eyes - Eye width measurements
- * @property {Object|null} nose - Nose metrics
- */
-
-/**
- * Manages the application's measurement state with stabilization
- */
-export class StateManager {
-  constructor(config) {
-    this.config = config;
-    this.smoothedDistance = null;
-    this.lastDistanceUpdate = 0;
-
-    // Iris diameter smoothing for stable measurements (configurable)
-    this.smoothedIrisDiameterPx = null;
-    this.smoothingFactor = config.irisSmoothing ?? 0.15;
-    this.stabilizationThreshold = config.irisStabilizationThreshold ?? 0.5;
-
-    /** @type {MeasurementState} */
-    this.measurements = {
-      ipd: null,
-      faceWidth: null,
-      eyes: { left: null, right: null },
-      nose: null,
+    return {
+      distanceCm: eyeDistMm / 10,
+      ipd: {
+        near: ipdNear,
+        far: ipdFar,
+        left: screen(lm.pupil.left),
+        right: screen(lm.pupil.right),
+      },
+      faceWidth: {
+        valueMm: len(lm.faceWidth[0], lm.faceWidth[1]),
+        left: screen(lm.faceWidth[0]),
+        right: screen(lm.faceWidth[1]),
+      },
+      eyes: { left: eye(lm.eyeCorners.left), right: eye(lm.eyeCorners.right) },
+      nose: {
+        bridgeWidthMm: len(bridgeRow[0], bridgeRow[bridgeRow.length - 1]),
+        padSpanMm: len(padRow[0], padRow[padRow.length - 1]),
+        padHeightMm: Math.abs(rowCenterY(padRow) - rowCenterY(bridgeRow)),
+        padAngleDeg: frontalAngle(lm.padAngle),
+        padAngleLines: angleLines(lm.padAngle),
+        flareAngleDeg: frontalAngle(lm.flareAngle),
+        flareAngleLines: angleLines(lm.flareAngle),
+        rows: {
+          bridge: rowDrawData(bridgeRow.map(screen)),
+          pad: rowDrawData(padRow.map(screen)),
+        },
+      },
     };
   }
 
-  /**
-   * Reset all measurements to null
-   */
-  reset() {
-    this.measurements.ipd = null;
-    this.measurements.faceWidth = null;
-    this.measurements.eyes = { left: null, right: null };
-    this.measurements.nose = null;
-    // Don't reset smoothed iris diameter - maintain stability across brief interruptions
-  }
-
-  /**
-   * Smooth iris diameter with exponential smoothing and stabilization threshold
-   * @param {number} rawDiameterPx - Raw iris diameter in pixels
-   * @returns {number} Smoothed iris diameter
-   */
-  smoothIrisDiameter(rawDiameterPx) {
-    // Initialize on first call
-    if (this.smoothedIrisDiameterPx === null) {
-      this.smoothedIrisDiameterPx = rawDiameterPx;
-      return rawDiameterPx;
-    }
-
-    // Calculate difference
-    const diff = Math.abs(rawDiameterPx - this.smoothedIrisDiameterPx);
-
-    // Ignore tiny changes (stabilization threshold)
-    if (diff < this.stabilizationThreshold) {
-      return this.smoothedIrisDiameterPx; // No change
-    }
-
-    // Apply exponential smoothing for larger changes
-    this.smoothedIrisDiameterPx += (rawDiameterPx - this.smoothedIrisDiameterPx) * this.smoothingFactor;
-
-    return this.smoothedIrisDiameterPx;
-  }
-
-  /**
-   * Update measurements from head tracking data with iris diameter stabilization
-   * @param {Object} head - Head tracker instance
-   * @param {number} irisDiameterMm - Expected iris diameter in mm
-   */
-  updateMeasurements(head, irisDiameterMm) {
-    const leftIris = head.eyes.left.iris;
-    const rightIris = head.eyes.right.iris;
-
-    if (!leftIris || !rightIris) {
-      this.reset();
-      return;
-    }
-
-    // Calculate raw average iris diameter
-    const rawAvgDiameterPx = (rightIris.diameterPx + leftIris.diameterPx) / 2;
-    if (!Number.isFinite(rawAvgDiameterPx) || rawAvgDiameterPx <= 0) {
-      this.reset();
-      return;
-    }
-
-    // Apply smoothing to reduce jitter
-    const smoothedDiameterPx = this.smoothIrisDiameter(rawAvgDiameterPx);
-
-    // Calculate mmPerPx using smoothed diameter for stable measurements
-    const mmPerPx = irisDiameterMm / smoothedDiameterPx;
-
-    this.measurements.ipd = buildIpdMeasurement(leftIris, rightIris, mmPerPx);
-    this.measurements.faceWidth = buildFaceWidthMeasurement(head.face.widthPoints, mmPerPx);
-    this.measurements.eyes = {
-      left: buildEyeWidthMeasurement(head.eyes.left.segment, mmPerPx),
-      right: buildEyeWidthMeasurement(head.eyes.right.segment, mmPerPx),
-    };
-
-    const noseMetrics = computeNoseMetrics(head.nose.grid, mmPerPx);
-    this.measurements.nose = noseMetrics;
-  }
-
-  /**
-   * Update smoothed distance with exponential smoothing
-   * @param {number} distanceCm - Raw distance measurement in cm
-   * @returns {number} Smoothed distance
-   */
-  updateDistance(distanceCm) {
-    if (this.smoothedDistance == null) {
-      this.smoothedDistance = distanceCm;
-    } else {
-      const smoothingFactor = this.config.distanceSmoothing || 0.18;
-      this.smoothedDistance += (distanceCm - this.smoothedDistance) * smoothingFactor;
-    }
-
-    this.lastDistanceUpdate = performance.now();
-    return this.smoothedDistance;
-  }
-
-  /**
-   * Check if distance should be hidden due to timeout
-   * @returns {boolean} True if distance should be decayed
-   */
-  shouldDecayDistance() {
-    if (!this.lastDistanceUpdate) return false;
-    const timeout = this.config.distanceVisibilityTimeout || 1200;
-    return performance.now() - this.lastDistanceUpdate > timeout;
-  }
-
-  /**
-   * Decay (reset) distance when timeout expires
-   */
-  decayDistance() {
-    if (this.shouldDecayDistance()) {
-      this.smoothedDistance = null;
-      this.lastDistanceUpdate = 0;
-    }
-  }
-
-  /**
-   * Get current smoothed distance
-   * @returns {number|null} Smoothed distance in cm or null
-   */
-  getSmoothedDistance() {
-    return this.smoothedDistance;
-  }
-
-  /**
-   * Get current measurement state
-   * @returns {MeasurementState}
-   */
-  getMeasurements() {
-    return this.measurements;
-  }
+  return { update };
 }

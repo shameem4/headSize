@@ -16,9 +16,15 @@
   </script>
 </head>
 <body>
-<div>
-  <a href=https://www.linkedin.com/pulse/measuring-human-face-privately-browser-shameem-hameed-51okc/>Article</a>
+<div class="page-info">
+  <a href="https://www.linkedin.com/pulse/measuring-human-face-privately-browser-shameem-hameed-51okc/">Article</a>
+  <span id="last_modified"></span>
 </div>
+<script>
+  // Server's Last-Modified time for this page (set on each GitHub Pages deploy)
+  document.getElementById("last_modified").textContent =
+    "Last modified " + new Date(document.lastModified).toLocaleDateString("en-CA");
+</script>
   <div class="app">
     <!-- Left: camera window -->
     <section>

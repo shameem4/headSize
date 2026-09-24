@@ -1,20 +1,17 @@
 /**
- * Three.js 3D Graphics Module
+ * Three.js 3D Overlay Module
  * @module graphics-3d
  *
- * Provides 3D visualization for facial measurements using Three.js.
- *
- * Features:
- * - 3D head mesh from MediaPipe landmarks
- * - Interactive camera controls (orbit, zoom, pan)
- * - Real-time landmark visualization
- * - 3D measurement overlays
- * - Configurable lighting and materials
+ * Draws a triangulated face mesh, landmark points, and pupil lines from
+ * MediaPipe landmarks, aligned pixel-for-pixel over the video.
  */
 
 import * as THREE from 'three';
 import { THREEJS_CONFIG } from './config.js';
 import { FACE_MESH_TRIANGLES, IRIS_LEFT_CENTER, IRIS_RIGHT_CENTER } from './face-mesh-triangles.js';
+
+// Iris/pupil landmarks (468-477) are pushed forward so they render in front
+const IRIS_Z_OFFSET = 20;
 
 // ============================================================================
 // COORDINATE TRANSFORMATION UTILITIES
@@ -38,178 +35,55 @@ function landmarkTo3D(landmark, canvasWidth, canvasHeight, zOffset = 0) {
   };
 }
 
-// ============================================================================
-// LANDMARK MESH GENERATION
-// ============================================================================
-
 /**
- * Create a 3D head mesh from MediaPipe face landmarks
- * @param {Array} landmarks - MediaPipe normalized face landmarks
- * @param {number} canvasWidth - Canvas width for denormalization
- * @param {number} canvasHeight - Canvas height for denormalization
- * @returns {THREE.Mesh} 3D head mesh
+ * Flatten landmarks into an xyz position array
+ * @param {boolean} offsetIris - Push iris landmarks forward
+ * @returns {number[]}
  */
-function createHeadMesh(landmarks, canvasWidth, canvasHeight) {
-  const geometry = new THREE.BufferGeometry();
-
-  // Convert normalized landmarks to 3D positions
+function landmarkPositions(landmarks, canvasWidth, canvasHeight, offsetIris) {
   const positions = [];
-
-  // Map landmarks to 3D coordinates with centralized Y-axis flipping
   for (let i = 0; i < landmarks.length; i++) {
-    const landmark = landmarks[i];
-
-    // Offset iris/pupil landmarks forward to ensure they render in front
-    // Iris landmarks: 468-472 (left), 473-477 (right)
-    const zOffset = (i >= 468 && i <= 477) ? 20 : 0;
-
-    const pos = landmarkTo3D(landmark, canvasWidth, canvasHeight, zOffset);
+    const zOffset = offsetIris && i >= 468 && i <= 477 ? IRIS_Z_OFFSET : 0;
+    const pos = landmarkTo3D(landmarks[i], canvasWidth, canvasHeight, zOffset);
     positions.push(pos.x, pos.y, pos.z);
   }
-
-  // Create triangulated face mesh
-  const indices = [];
-  for (const triangle of FACE_MESH_TRIANGLES) {
-    indices.push(triangle[0], triangle[1], triangle[2]);
-  }
-
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-
-  const config = THREEJS_CONFIG.headModel;
-  const material = new THREE.MeshPhongMaterial({
-    color: config.color,
-    emissive: config.emissive,
-    emissiveIntensity: config.emissiveIntensity,
-    shininess: config.shininess,
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity: config.opacity,
-    wireframe: config.wireframe,
-  });
-
-  const mesh = new THREE.Mesh(geometry, material);
-  return mesh;
+  return positions;
 }
 
 /**
- * Create landmark points visualization
- * @param {Array} landmarks - MediaPipe normalized face landmarks
- * @returns {THREE.Points} Landmark points object
+ * Compute pupil line segments: each pupil extended along the face normal,
+ * plus a line joining the two extension points
+ * @returns {Float32Array|null} 3 line segments (18 floats)
  */
-function createLandmarkPoints(landmarks, canvasWidth, canvasHeight) {
-  const geometry = new THREE.BufferGeometry();
-  const positions = [];
-
-  // Use centralized coordinate transformation
-  for (const landmark of landmarks) {
-    const pos = landmarkTo3D(landmark, canvasWidth, canvasHeight, 0);
-    positions.push(pos.x, pos.y, pos.z);
-  }
-
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-
-  const config = THREEJS_CONFIG.landmarks;
-  const material = new THREE.PointsMaterial({
-    size: config.size,
-    color: config.color,
-    transparent: true,
-    opacity: config.opacity,
-    sizeAttenuation: true,
-  });
-
-  return new THREE.Points(geometry, material);
-}
-
-/**
- * Create 3D pupil connection lines
- * @param {Array} landmarks - MediaPipe normalized face landmarks
- * @param {number} canvasWidth - Canvas width
- * @param {number} canvasHeight - Canvas height
- * @returns {THREE.LineSegments} Pupil connection lines
- */
-function createPupilLines(landmarks, canvasWidth, canvasHeight) {
-  // Get pupil positions
+function pupilLinePositions(landmarks, canvasWidth, canvasHeight) {
   const leftPupil = landmarks[IRIS_LEFT_CENTER];
   const rightPupil = landmarks[IRIS_RIGHT_CENTER];
-
   if (!leftPupil || !rightPupil) return null;
 
-  // Convert to 3D coordinates using centralized transformation
-  const leftPos = landmarkTo3D(leftPupil, canvasWidth, canvasHeight, 20);
-  const rightPos = landmarkTo3D(rightPupil, canvasWidth, canvasHeight, 20);
+  const leftPos = landmarkTo3D(leftPupil, canvasWidth, canvasHeight, IRIS_Z_OFFSET);
+  const rightPos = landmarkTo3D(rightPupil, canvasWidth, canvasHeight, IRIS_Z_OFFSET);
 
-  // Calculate the vector between eyes (to determine face rotation)
-  const eyeVecX = rightPos.x - leftPos.x;
-  const eyeVecY = rightPos.y - leftPos.y;
-  const eyeVecZ = rightPos.z - leftPos.z;
-
-  // Calculate perpendicular vector (normal to face plane, pointing toward camera)
-  // Cross product of eye vector with up vector gives us the face normal
-  // We want to extend along this normal direction
-  const upX = 0;
-  const upY = 1; // Up in MediaPipe/screen coords (positive Y is down)
-  const upZ = 0;
-
-  // Cross product: eyeVec × up = normal
-  let normalX = eyeVecY * upZ - eyeVecZ * upY;
-  let normalY = eyeVecZ * upX - eyeVecX * upZ;
-  let normalZ = eyeVecX * upY - eyeVecY * upX;
-
-  // Normalize the normal vector
-  const normalLength = Math.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+  // Face normal = eyeVec × up, with up = (0, 1, 0) in screen coords
+  let normalX = -(rightPos.z - leftPos.z);
+  let normalZ = rightPos.x - leftPos.x;
+  const normalLength = Math.hypot(normalX, normalZ);
   if (normalLength > 0) {
     normalX /= normalLength;
-    normalY /= normalLength;
     normalZ /= normalLength;
   }
 
-  // Calculate extension distance scaled by Z-component for consistent visual depth
-  // When face is straight on (normalZ high), we need more extension to be visible
-  // When face is turned (normalZ low), we need less extension
-  const baseExtension = 100;
-  const zScale = Math.max(0.3, Math.abs(normalZ)); // Prevent division by zero, minimum 0.3
-  const extensionDistance = baseExtension / zScale;
+  // Scale extension by 1/|normalZ| so the lines look equally long when the
+  // face is turned (minimum 0.3 to avoid blowing up)
+  const extension = 100 / Math.max(0.3, Math.abs(normalZ));
 
-  // Extension points (along face normal - perpendicular to face)
-  const leftExtX = leftPos.x + normalX * extensionDistance;
-  const leftExtY = leftPos.y + normalY * extensionDistance;
-  const leftExtZ = leftPos.z + normalZ * extensionDistance;
+  const leftExt = { x: leftPos.x + normalX * extension, y: leftPos.y, z: leftPos.z + normalZ * extension };
+  const rightExt = { x: rightPos.x + normalX * extension, y: rightPos.y, z: rightPos.z + normalZ * extension };
 
-  const rightExtX = rightPos.x + normalX * extensionDistance;
-  const rightExtY = rightPos.y + normalY * extensionDistance;
-  const rightExtZ = rightPos.z + normalZ * extensionDistance;
-
-  // Create line geometry: 3 lines total
-  // Line 1: Left pupil to left extension point
-  // Line 2: Right pupil to right extension point
-  // Line 3: Left extension point to right extension point
-  const positions = new Float32Array([
-    // Line 1: Left pupil extension
-    leftPos.x, leftPos.y, leftPos.z,
-    leftExtX, leftExtY, leftExtZ,
-
-    // Line 2: Right pupil extension
-    rightPos.x, rightPos.y, rightPos.z,
-    rightExtX, rightExtY, rightExtZ,
-
-    // Line 3: Connect the extension points
-    leftExtX, leftExtY, leftExtZ,
-    rightExtX, rightExtY, rightExtZ,
+  return new Float32Array([
+    leftPos.x, leftPos.y, leftPos.z, leftExt.x, leftExt.y, leftExt.z,
+    rightPos.x, rightPos.y, rightPos.z, rightExt.x, rightExt.y, rightExt.z,
+    leftExt.x, leftExt.y, leftExt.z, rightExt.x, rightExt.y, rightExt.z,
   ]);
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-  const material = new THREE.LineBasicMaterial({
-    color: 0x00ff00, // Green color
-    linewidth: 2,
-    transparent: true,
-    opacity: 0.8,
-  });
-
-  return new THREE.LineSegments(geometry, material);
 }
 
 // ============================================================================
@@ -222,131 +96,72 @@ function createPupilLines(landmarks, canvasWidth, canvasHeight) {
  * @returns {Object} Graphics 3D renderer with public methods
  */
 export function createGraphics3D(canvasElement) {
-  // Three.js core components
-  const scene = new THREE.Scene();
+  const scene = new THREE.Scene(); // background stays null (transparent)
 
-  // Use orthographic camera for exact pixel-to-pixel overlay matching
-  // This creates a 2D-like projection that maps directly to canvas coordinates
-  const camera = new THREE.OrthographicCamera(
-    0,                          // left
-    canvasElement.width,        // right
-    0,                          // top
-    canvasElement.height,       // bottom
-    -2000,                      // near (enough depth for face Z-coordinates)
-    2000                        // far
-  );
+  // Orthographic camera maps world units 1:1 to canvas pixels
+  const camera = new THREE.OrthographicCamera(0, 1, 0, 1, -2000, 2000);
 
   const renderer = new THREE.WebGLRenderer({
     canvas: canvasElement,
     antialias: true,
     alpha: true,
   });
-
-  renderer.setSize(canvasElement.width, canvasElement.height);
   renderer.setPixelRatio(window.devicePixelRatio);
 
-  // Scene setup - transparent background for overlay
-  const bgConfig = THREEJS_CONFIG.scene;
-  if (bgConfig.background === null || bgConfig.background === 'transparent') {
-    scene.background = null; // Transparent
-  } else {
-    scene.background = new THREE.Color(bgConfig.background);
-  }
+  // Lighting
+  const { ambient, directional, point } = THREEJS_CONFIG.lights;
+  scene.add(new THREE.AmbientLight(ambient.color, ambient.intensity));
+  const directionalLight = new THREE.DirectionalLight(directional.color, directional.intensity);
+  directionalLight.position.set(directional.position.x, directional.position.y, directional.position.z);
+  scene.add(directionalLight);
+  const pointLight = new THREE.PointLight(point.color, point.intensity);
+  pointLight.position.set(point.position.x, point.position.y, point.position.z);
+  scene.add(pointLight);
 
-  // No fog for overlay mode
-  // Camera positioned to look at the canvas plane
-  const cameraDefaultDistance = 1000;
-  let currentCanvasWidth = Math.max(
-    1,
-    canvasElement.width || canvasElement.clientWidth || 1280
+  // Head mesh
+  const headConfig = THREEJS_CONFIG.headModel;
+  const headGeometry = new THREE.BufferGeometry();
+  headGeometry.setIndex(FACE_MESH_TRIANGLES.flat());
+  const headMesh = new THREE.Mesh(
+    headGeometry,
+    new THREE.MeshPhongMaterial({
+      color: headConfig.color,
+      emissive: headConfig.emissive,
+      emissiveIntensity: headConfig.emissiveIntensity,
+      shininess: headConfig.shininess,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: headConfig.opacity,
+      wireframe: headConfig.wireframe,
+    })
   );
-  let currentCanvasHeight = Math.max(
-    1,
-    canvasElement.height || canvasElement.clientHeight || 720
+
+  // Landmark points
+  const pointsConfig = THREEJS_CONFIG.landmarks;
+  const landmarkPoints = new THREE.Points(
+    new THREE.BufferGeometry(),
+    new THREE.PointsMaterial({
+      size: pointsConfig.size,
+      color: pointsConfig.color,
+      transparent: true,
+      opacity: pointsConfig.opacity,
+      sizeAttenuation: true,
+    })
+  );
+  landmarkPoints.visible = pointsConfig.visible;
+
+  // Pupil lines
+  const pupilLines = new THREE.LineSegments(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({
+      color: 0x00ff00,
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.8,
+    })
   );
 
-  function alignCameraToCanvas(width, height) {
-    const safeWidth = Math.max(1, width);
-    const safeHeight = Math.max(1, height);
-    currentCanvasWidth = safeWidth;
-    currentCanvasHeight = safeHeight;
-    camera.left = 0;
-    camera.right = safeWidth;
-    camera.top = 0;
-    camera.bottom = safeHeight;
-    camera.position.set(0, 0, cameraDefaultDistance);
-    camera.lookAt(0, 0, 0);
-    camera.updateProjectionMatrix();
-  }
-
-  alignCameraToCanvas(currentCanvasWidth, currentCanvasHeight);
-
-  // No orbit controls - mesh follows face motion automatically
-  const controls = null;
-
-  // Lighting setup
-  const lights = [];
-
-  if (THREEJS_CONFIG.lights.ambient.enabled) {
-    const ambient = new THREE.AmbientLight(
-      THREEJS_CONFIG.lights.ambient.color,
-      THREEJS_CONFIG.lights.ambient.intensity
-    );
-    scene.add(ambient);
-    lights.push(ambient);
-  }
-
-  if (THREEJS_CONFIG.lights.directional.enabled) {
-    const directional = new THREE.DirectionalLight(
-      THREEJS_CONFIG.lights.directional.color,
-      THREEJS_CONFIG.lights.directional.intensity
-    );
-    const pos = THREEJS_CONFIG.lights.directional.position;
-    directional.position.set(pos.x, pos.y, pos.z);
-    scene.add(directional);
-    lights.push(directional);
-  }
-
-  if (THREEJS_CONFIG.lights.point.enabled) {
-    const point = new THREE.PointLight(
-      THREEJS_CONFIG.lights.point.color,
-      THREEJS_CONFIG.lights.point.intensity
-    );
-    const pos = THREEJS_CONFIG.lights.point.position;
-    point.position.set(pos.x, pos.y, pos.z);
-    scene.add(point);
-    lights.push(point);
-  }
-
-  // Grid helper
-  if (THREEJS_CONFIG.grid.enabled) {
-    const gridHelper = new THREE.GridHelper(
-      THREEJS_CONFIG.grid.size,
-      THREEJS_CONFIG.grid.divisions,
-      THREEJS_CONFIG.grid.colorCenterLine,
-      THREEJS_CONFIG.grid.colorGrid
-    );
-    scene.add(gridHelper);
-  }
-
-  // Axes helper
-  if (THREEJS_CONFIG.axes.enabled) {
-    const axesHelper = new THREE.AxesHelper(THREEJS_CONFIG.axes.size);
-    scene.add(axesHelper);
-  }
-
-  // Scene objects
-  let headMesh = null;
-  let landmarkPoints = null;
-  let pupilLines = null;
-
-  // User settings (persist across mesh updates)
-  const userSettings = {
-    wireframe: false,
-    opacity: THREEJS_CONFIG.headModel.opacity,
-    landmarksVisible: THREEJS_CONFIG.landmarks.enabled,
-    pupilLinesVisible: true,
-  };
+  scene.add(headMesh, landmarkPoints, pupilLines);
 
   // ========================================================================
   // PUBLIC API
@@ -359,141 +174,21 @@ export function createGraphics3D(canvasElement) {
    * @param {number} canvasHeight - Canvas height
    */
   function updateFaceMesh(landmarks, canvasWidth, canvasHeight) {
-    if (!landmarks || landmarks.length === 0) {
-      // Clear existing mesh
-      if (headMesh) {
-        scene.remove(headMesh);
-        headMesh.geometry.dispose();
-        headMesh.material.dispose();
-        headMesh = null;
-      }
-      if (landmarkPoints) {
-        scene.remove(landmarkPoints);
-        landmarkPoints.geometry.dispose();
-        landmarkPoints.material.dispose();
-        landmarkPoints = null;
-      }
-      if (pupilLines) {
-        scene.remove(pupilLines);
-        pupilLines.geometry.dispose();
-        pupilLines.material.dispose();
-        pupilLines = null;
-      }
-      return;
-    }
+    headGeometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(landmarkPositions(landmarks, canvasWidth, canvasHeight, true), 3)
+    );
+    headGeometry.computeVertexNormals();
 
-    // Update geometry only (reuse material if mesh exists)
-    if (headMesh) {
-      // Update existing mesh geometry
-      const newGeometry = headMesh.geometry;
-      const positions = [];
+    landmarkPoints.geometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(landmarkPositions(landmarks, canvasWidth, canvasHeight, false), 3)
+    );
 
-      for (let i = 0; i < landmarks.length; i++) {
-        const landmark = landmarks[i];
-
-        // Offset iris/pupil landmarks forward to ensure they render in front
-        const zOffset = (i >= 468 && i <= 477) ? 20 : 0;
-
-        const pos = landmarkTo3D(landmark, canvasWidth, canvasHeight, zOffset);
-        positions.push(pos.x, pos.y, pos.z);
-      }
-
-      newGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      newGeometry.computeVertexNormals();
-    } else if (THREEJS_CONFIG.headModel.enabled) {
-      // Create new mesh first time
-      headMesh = createHeadMesh(landmarks, canvasWidth, canvasHeight);
-      scene.add(headMesh);
-
-      // Apply user settings
-      headMesh.material.wireframe = userSettings.wireframe;
-      headMesh.material.opacity = userSettings.opacity;
-    }
-
-    // Update landmark points
-    if (landmarkPoints) {
-      const positions = [];
-      for (const landmark of landmarks) {
-        const pos = landmarkTo3D(landmark, canvasWidth, canvasHeight, 0);
-        positions.push(pos.x, pos.y, pos.z);
-      }
-      landmarkPoints.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      landmarkPoints.visible = userSettings.landmarksVisible;
-    } else if (THREEJS_CONFIG.landmarks.enabled) {
-      landmarkPoints = createLandmarkPoints(landmarks, canvasWidth, canvasHeight);
-      scene.add(landmarkPoints);
-      landmarkPoints.visible = userSettings.landmarksVisible;
-    }
-
-    // Update pupil lines
-    if (landmarks.length > IRIS_RIGHT_CENTER) {
-      if (pupilLines) {
-        // Update existing pupil lines geometry
-        const leftPupil = landmarks[IRIS_LEFT_CENTER];
-        const rightPupil = landmarks[IRIS_RIGHT_CENTER];
-
-        if (leftPupil && rightPupil) {
-          // Convert to 3D coordinates using centralized transformation
-          const leftPos = landmarkTo3D(leftPupil, canvasWidth, canvasHeight, 20);
-          const rightPos = landmarkTo3D(rightPupil, canvasWidth, canvasHeight, 20);
-
-          // Calculate the vector between eyes
-          const eyeVecX = rightPos.x - leftPos.x;
-          const eyeVecY = rightPos.y - leftPos.y;
-          const eyeVecZ = rightPos.z - leftPos.z;
-
-          // Calculate perpendicular vector (normal to face plane)
-          const upX = 0;
-          const upY = 1; // Up in MediaPipe/screen coords (positive Y is down)
-          const upZ = 0;
-
-          // Cross product: eyeVec × up = normal
-          let normalX = eyeVecY * upZ - eyeVecZ * upY;
-          let normalY = eyeVecZ * upX - eyeVecX * upZ;
-          let normalZ = eyeVecX * upY - eyeVecY * upX;
-
-          // Normalize the normal vector
-          const normalLength = Math.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
-          if (normalLength > 0) {
-            normalX /= normalLength;
-            normalY /= normalLength;
-            normalZ /= normalLength;
-          }
-
-          // Calculate extension distance scaled by Z-component for consistent visual depth
-          const baseExtension = 100;
-          const zScale = Math.max(0.3, Math.abs(normalZ));
-          const extensionDistance = baseExtension / zScale;
-
-          // Extension points (along face normal - perpendicular to face)
-          const leftExtX = leftPos.x + normalX * extensionDistance;
-          const leftExtY = leftPos.y + normalY * extensionDistance;
-          const leftExtZ = leftPos.z + normalZ * extensionDistance;
-
-          const rightExtX = rightPos.x + normalX * extensionDistance;
-          const rightExtY = rightPos.y + normalY * extensionDistance;
-          const rightExtZ = rightPos.z + normalZ * extensionDistance;
-
-          const positions = new Float32Array([
-            leftPos.x, leftPos.y, leftPos.z,
-            leftExtX, leftExtY, leftExtZ,
-            rightPos.x, rightPos.y, rightPos.z,
-            rightExtX, rightExtY, rightExtZ,
-            leftExtX, leftExtY, leftExtZ,
-            rightExtX, rightExtY, rightExtZ,
-          ]);
-
-          pupilLines.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        }
-        pupilLines.visible = userSettings.pupilLinesVisible;
-      } else {
-        // Create new pupil lines
-        pupilLines = createPupilLines(landmarks, canvasWidth, canvasHeight);
-        if (pupilLines) {
-          scene.add(pupilLines);
-          pupilLines.visible = userSettings.pupilLinesVisible;
-        }
-      }
+    const pupilPositions = pupilLinePositions(landmarks, canvasWidth, canvasHeight);
+    pupilLines.visible = Boolean(pupilPositions);
+    if (pupilPositions) {
+      pupilLines.geometry.setAttribute('position', new THREE.BufferAttribute(pupilPositions, 3));
     }
   }
 
@@ -510,98 +205,24 @@ export function createGraphics3D(canvasElement) {
    * @param {number} height - New height
    */
   function handleResize(width, height) {
-    alignCameraToCanvas(width, height);
+    camera.left = 0;
+    camera.right = Math.max(1, width);
+    camera.top = 0;
+    camera.bottom = Math.max(1, height);
+    camera.position.set(0, 0, 1000);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
     renderer.setSize(width, height);
   }
 
-  /**
-   * Clear the scene
-   */
-  function clear() {
-    if (headMesh) {
-      scene.remove(headMesh);
-      headMesh.geometry.dispose();
-      headMesh.material.dispose();
-      headMesh = null;
-    }
-    if (landmarkPoints) {
-      scene.remove(landmarkPoints);
-      landmarkPoints.geometry.dispose();
-      landmarkPoints.material.dispose();
-      landmarkPoints = null;
-    }
-    if (pupilLines) {
-      scene.remove(pupilLines);
-      pupilLines.geometry.dispose();
-      pupilLines.material.dispose();
-      pupilLines = null;
-    }
-  }
-
-  /**
-   * Dispose of all resources
-   */
-  function dispose() {
-    clear();
-    renderer.dispose();
-  }
-
-  /**
-   * Reset camera to default position (no-op for overlay mode)
-   */
-  function resetCamera() {
-    alignCameraToCanvas(currentCanvasWidth, currentCanvasHeight);
-  }
-
-  /**
-   * Toggle wireframe mode
-   * @param {boolean} enabled - Enable wireframe
-   */
-  function setWireframe(enabled) {
-    userSettings.wireframe = enabled;
-    if (headMesh) {
-      headMesh.material.wireframe = enabled;
-    }
-  }
-
-  /**
-   * Set head mesh opacity
-   * @param {number} opacity - Opacity value (0-1)
-   */
-  function setOpacity(opacity) {
-    const clampedOpacity = Math.max(0, Math.min(1, opacity));
-    userSettings.opacity = clampedOpacity;
-    if (headMesh) {
-      headMesh.material.opacity = clampedOpacity;
-    }
-  }
-
-  /**
-   * Toggle landmark visibility
-   * @param {boolean} visible - Show landmarks
-   */
-  function setLandmarksVisible(visible) {
-    userSettings.landmarksVisible = visible;
-    if (landmarkPoints) {
-      landmarkPoints.visible = visible;
-    }
-  }
+  handleResize(canvasElement.width, canvasElement.height);
 
   return {
     updateFaceMesh,
     render,
     handleResize,
-    clear,
-    dispose,
-    resetCamera,
-    setWireframe,
-    setOpacity,
-    setLandmarksVisible,
-
-    // Expose Three.js objects for advanced usage
-    scene,
-    camera,
-    renderer,
-    controls,
+    setWireframe: (enabled) => { headMesh.material.wireframe = enabled; },
+    setOpacity: (opacity) => { headMesh.material.opacity = Math.max(0, Math.min(1, opacity)); },
+    setLandmarksVisible: (visible) => { landmarkPoints.visible = visible; },
   };
 }

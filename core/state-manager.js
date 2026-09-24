@@ -3,14 +3,12 @@
  * @module core/state-manager
  */
 
-import { MeasurementBuilders } from "../calculations.js";
-
-const {
+import {
   buildIpdMeasurement,
   buildFaceWidthMeasurement,
   buildEyeWidthMeasurement,
   computeNoseMetrics,
-} = MeasurementBuilders;
+} from "../calculations.js";
 
 /**
  * @typedef {Object} MeasurementState

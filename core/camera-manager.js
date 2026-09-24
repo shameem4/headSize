@@ -15,7 +15,6 @@ export class CameraManager {
     this.video = videoElement;
     this.config = config;
     this.mirrorEnabled = true;
-    this.mediaStream = null;
   }
 
   /**
@@ -30,13 +29,7 @@ export class CameraManager {
 
       if (videoDevices.length === 0) return null;
 
-      // Get priority order from config
-      const priorities = this.config.cameraPreferences?.priorities || [
-        /front.*wide/i,      // "Front Wide" camera (iPhone, etc.)
-        /wide.*front/i,      // Alternative naming
-        /front/i,            // Any front camera
-        /user/i,             // User-facing camera
-      ];
+      const priorities = this.config.cameraPreferences.priorities;
 
       // Try each priority pattern
       for (const pattern of priorities) {
@@ -58,14 +51,12 @@ export class CameraManager {
 
   /**
    * Initialize camera and request user media
-   * @returns {Promise<MediaStream>}
    */
   async initialize() {
     // Try to find the best front-facing camera
     const deviceId = await this.findBestFrontCamera();
 
-    // Get facingMode from config or default to "user"
-    const facingMode = this.config.cameraPreferences?.facingMode || "user";
+    const facingMode = this.config.cameraPreferences.facingMode;
 
     const constraints = {
       audio: false,
@@ -84,10 +75,7 @@ export class CameraManager {
           },
     };
 
-    this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-    this.video.srcObject = this.mediaStream;
-
-    return this.mediaStream;
+    this.video.srcObject = await navigator.mediaDevices.getUserMedia(constraints);
   }
 
   /**
@@ -113,37 +101,11 @@ export class CameraManager {
   }
 
   /**
-   * Get current mirror state
-   * @returns {boolean} True if mirroring is enabled
-   */
-  isMirrorEnabled() {
-    return this.mirrorEnabled;
-  }
-
-  /**
    * Apply mirroring to landmarks if enabled
    * @param {Array} landmarks - Original landmarks
    * @returns {Array} Mirrored landmarks if enabled, otherwise original
    */
   applyMirrorIfEnabled(landmarks) {
     return this.mirrorEnabled ? this.mirrorLandmarks(landmarks) : landmarks;
-  }
-
-  /**
-   * Stop camera stream
-   */
-  stop() {
-    if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach((track) => track.stop());
-      this.mediaStream = null;
-    }
-  }
-
-  /**
-   * Get video element
-   * @returns {HTMLVideoElement}
-   */
-  getVideoElement() {
-    return this.video;
   }
 }

@@ -1,6 +1,9 @@
-import { ProjectionUtils, MeasurementBuilders } from "./calculations.js";
-const { buildNoseGridPoints, buildLandmarkPair } = ProjectionUtils;
-const { computeIrisMeasurement, extractEyeSegment } = MeasurementBuilders;
+import {
+  buildNoseGridPoints,
+  buildLandmarkPair,
+  computeIrisMeasurement,
+  extractEyeSegment,
+} from "./calculations.js";
 
 class NoseComponent {
   constructor(indices) {
@@ -61,50 +64,37 @@ class EyeSide {
       this.reset();
       return;
     }
-    if (this.irisIndices) {
-      // First compute raw measurement without distance calculation
-      const rawMeasurement = computeIrisMeasurement(
-        landmarks,
-        this.irisIndices.iris,
-        this.irisIndices.pupil,
-        canvasWidth,
-        canvasHeight,
-        null // Don't calculate distance yet
-      );
+    const rawMeasurement = computeIrisMeasurement(
+      landmarks,
+      this.irisIndices.iris,
+      this.irisIndices.pupil,
+      canvasWidth,
+      canvasHeight
+    );
 
-      if (rawMeasurement && rawMeasurement.diameterPx > 0) {
-        // Apply exponential moving average smoothing to diameter
-        if (this.smoothedDiameter === null) {
-          this.smoothedDiameter = rawMeasurement.diameterPx;
-        } else {
-          this.smoothedDiameter =
-            this.smoothingFactor * rawMeasurement.diameterPx +
-            (1 - this.smoothingFactor) * this.smoothedDiameter;
-        }
-
-        // Calculate distance from smoothed diameter
-        const distanceCm =
-          typeof estimateDistanceFn === "function"
-            ? estimateDistanceFn(this.smoothedDiameter)
-            : null;
-
-        // Return measurement with smoothed diameter and calculated distance
-        this.iris = {
-          ...rawMeasurement,
-          diameterPx: this.smoothedDiameter,
-          distanceCm
-        };
+    if (rawMeasurement && rawMeasurement.diameterPx > 0) {
+      // Apply exponential moving average smoothing to diameter
+      if (this.smoothedDiameter === null) {
+        this.smoothedDiameter = rawMeasurement.diameterPx;
       } else {
-        this.iris = rawMeasurement;
+        this.smoothedDiameter =
+          this.smoothingFactor * rawMeasurement.diameterPx +
+          (1 - this.smoothingFactor) * this.smoothedDiameter;
       }
+
+      // Calculate distance from smoothed diameter
+      const distanceCm = estimateDistanceFn(this.smoothedDiameter);
+
+      // Return measurement with smoothed diameter and calculated distance
+      this.iris = {
+        ...rawMeasurement,
+        diameterPx: this.smoothedDiameter,
+        distanceCm
+      };
     } else {
-      this.iris = null;
+      this.iris = rawMeasurement;
     }
-    if (this.widthIdx) {
-      this.segment = extractEyeSegment(landmarks, this.widthIdx, canvasWidth, canvasHeight);
-    } else {
-      this.segment = null;
-    }
+    this.segment = extractEyeSegment(landmarks, this.widthIdx, canvasWidth, canvasHeight);
   }
 }
 
@@ -127,9 +117,7 @@ class EyesComponent {
 
 class HeadComponent {
   constructor({ noseGridIndices, faceWidthIdx, eyeWidthIdx, iris }) {
-    this.landmarks = null;
-    const noseRows = noseGridIndices?.rows || noseGridIndices;
-    this.nose = new NoseComponent(noseRows);
+    this.nose = new NoseComponent(noseGridIndices);
     this.face = new FaceComponent(faceWidthIdx);
     this.eyes = new EyesComponent({
       leftIris: iris.left,
@@ -140,7 +128,6 @@ class HeadComponent {
   }
 
   reset() {
-    this.landmarks = null;
     this.nose.reset();
     this.face.reset();
     this.eyes.reset();
@@ -151,7 +138,6 @@ class HeadComponent {
       this.reset();
       return;
     }
-    this.landmarks = landmarks;
     this.nose.update(landmarks, canvasWidth, canvasHeight);
     this.face.update(landmarks, canvasWidth, canvasHeight);
     this.eyes.update(landmarks, canvasWidth, canvasHeight, estimateDistanceFn);

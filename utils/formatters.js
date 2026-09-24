@@ -22,16 +22,6 @@ export function formatDeg(v) {
 }
 
 /**
- * Safely return a color hex string with fallback
- * @param {string|null|undefined} hex - Hex color string
- * @param {string} fallback - Fallback color (default: "#fff")
- * @returns {string} Valid hex color string
- */
-export function safeColor(hex, fallback = "#fff") {
-  return typeof hex === "string" && hex ? hex : fallback;
-}
-
-/**
  * Format a centimeter value for display
  * @param {number|null|undefined} v - Value in centimeters
  * @returns {string} Formatted string (e.g., "25.3 cm" or "--")

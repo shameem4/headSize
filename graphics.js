@@ -1,29 +1,20 @@
 /**
- * Graphics Module - Main Orchestration
+ * Graphics Module - 2D overlay orchestration
  * @module graphics
  *
- * Provides a clean, stable graphics API for the headSize application.
- *
  * Public API:
- * - createGraphics(canvas, ctx) - Initialize graphics renderer
+ * - createGraphics(ctx) - Initialize graphics renderer
  * - beginFrame() - Reset state for new frame
  * - setRenderPolicy(policy) - Update render policy
- * - drawMeasurementOverlays(state, options) - Draw all measurement overlays
- * - drawNoseGrid(landmarks, indices, color) - Draw nose landmark grid
- * - drawNoseOverlay(metrics) - Draw nose measurement overlay
+ * - drawMeasurementOverlays(state) - Draw all measurement overlays
  *
- * Architecture:
- * This module has been refactored for maximum readability and maintainability:
- * - Math/geometry: utils/graphics-geometry.js
- * - Drawing primitives: utils/drawing-primitives.js
- * - Angle rendering: utils/angle-rendering.js
- * - Nose overlays: graphics/nose-overlays.js
- * - Face/eye overlays: graphics/face-eye-overlays.js
+ * Helpers live in utils/ (geometry, drawing primitives, collisions) and
+ * graphics/ (nose and face/eye overlays).
  */
 
 import { RENDER_POLICY } from "./config.js";
 import { CollisionManager } from "./utils/collision-manager.js";
-import { drawNoseGrid, drawNoseOverlay } from "./graphics/nose-overlays.js";
+import { drawNoseOverlay } from "./graphics/nose-overlays.js";
 import {
   drawIpdMeasurement,
   drawFaceWidthMeasurement,
@@ -37,13 +28,10 @@ import {
 /**
  * Create a graphics renderer instance
  *
- * @param {HTMLCanvasElement} canvasElement - Canvas DOM element
- * @param {CanvasRenderingContext2D} canvasCtx - Canvas rendering context
+ * @param {CanvasRenderingContext2D} ctx - Canvas rendering context
  * @returns {Object} Graphics renderer with public methods
  */
-export function createGraphics(canvasElement, canvasCtx) {
-  const ctx = canvasCtx;
-  const canvas = canvasElement;
+export function createGraphics(ctx) {
   const collisionManager = new CollisionManager();
 
   // Render policy state (mutable)
@@ -99,28 +87,18 @@ export function createGraphics(canvasElement, canvasCtx) {
   // ========================================================================
 
   /**
-   * Draw all measurement overlays based on state and policy
-   *
-   * Renders measurements based on:
-   * - Focus mode (global, face, eyes, nose)
-   * - Detail level (minimal, standard, full)
-   * - Available measurements in state
+   * Draw all measurement overlays based on state and focus mode
    *
    * @param {Object} state - Measurement state
    * @param {Object} state.faceWidth - Face width measurement
    * @param {Object} state.ipd - IPD measurements (near/far)
    * @param {Object} state.eyes - Eye width measurements (left/right)
    * @param {Object} state.nose - Nose metrics
-   * @param {Object} options - Rendering options
-   * @param {boolean} [options.noseOverlayEnabled=false] - Show nose overlay
    */
-  function drawMeasurementOverlays(state, { noseOverlayEnabled = false } = {}) {
+  function drawMeasurementOverlays(state) {
     const focus = policy.focus;
-    const level = policy.detailLevel;
 
-    // ======================================================================
-    // FACE WIDTH (always in minimal/standard/full)
-    // ======================================================================
+    // FACE WIDTH
     if (state?.faceWidth && (focus === "global" || focus === "face")) {
       withAlpha(
         () => drawFaceWidthMeasurement(ctx, state.faceWidth, collisionManager),
@@ -128,9 +106,7 @@ export function createGraphics(canvasElement, canvasCtx) {
       );
     }
 
-    // ======================================================================
-    // IPD (always in minimal/standard/full)
-    // ======================================================================
+    // IPD
     if (state?.ipd && (focus === "global" || focus === "eyes" || focus === "face")) {
       withAlpha(
         () => drawIpdMeasurement(ctx, state.ipd, collisionManager),
@@ -138,33 +114,16 @@ export function createGraphics(canvasElement, canvasCtx) {
       );
     }
 
-    // ======================================================================
-    // EYE WIDTHS (standard/full only)
-    // ======================================================================
-    if (level !== "minimal" && (focus === "global" || focus === "eyes")) {
-      // Left eye
-      if (state?.eyes?.left) {
+    // EYE WIDTHS
+    if (focus === "global" || focus === "eyes") {
+      for (const [side, label] of [["left", "L"], ["right", "R"]]) {
+        if (!state?.eyes?.[side]) continue;
         withAlpha(() => {
           leadersUsed = drawEyeWidth(
             ctx,
-            state.eyes.left,
-            "left",
-            "L",
-            policy,
-            leadersUsed,
-            collisionManager
-          );
-        }, focus !== "eyes");
-      }
-
-      // Right eye
-      if (state?.eyes?.right) {
-        withAlpha(() => {
-          leadersUsed = drawEyeWidth(
-            ctx,
-            state.eyes.right,
-            "right",
-            "R",
+            state.eyes[side],
+            side,
+            label,
             policy,
             leadersUsed,
             collisionManager
@@ -173,48 +132,15 @@ export function createGraphics(canvasElement, canvasCtx) {
       }
     }
 
-    // ======================================================================
-    // NOSE OVERLAY (only if enabled; respects detail level)
-    // ======================================================================
-    if (noseOverlayEnabled && (focus === "global" || focus === "nose")) {
-      withAlpha(
-        () => drawNoseOverlay(ctx, state.nose, policy, collisionManager),
-        focus !== "nose"
-      );
+    // NOSE
+    if (focus === "global" || focus === "nose") {
+      withAlpha(() => drawNoseOverlay(ctx, state.nose), focus !== "nose");
     }
   }
-
-  // ========================================================================
-  // PUBLIC NOSE RENDERING
-  // ========================================================================
-
-  /**
-   * Draw nose measurement overlay (public API)
-   * @param {Object} metrics - Nose metrics object
-   */
-  function drawNoseOverlayPublic(metrics) {
-    drawNoseOverlay(ctx, metrics, policy, collisionManager);
-  }
-
-  /**
-   * Draw nose landmark grid (public API)
-   * @param {Array} landmarks - MediaPipe face landmarks
-   * @param {Object|Array} noseIndices - Nose landmark indices
-   * @param {string} [color] - Grid color
-   */
-  function drawNoseGridPublic(landmarks, noseIndices, color) {
-    drawNoseGrid(ctx, canvas, landmarks, noseIndices, color);
-  }
-
-  // ========================================================================
-  // PUBLIC API
-  // ========================================================================
 
   return {
     beginFrame,
     setRenderPolicy,
-    drawNoseGrid: drawNoseGridPublic,
     drawMeasurementOverlays,
-    drawNoseOverlay: drawNoseOverlayPublic,
   };
 }

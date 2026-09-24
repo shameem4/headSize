@@ -921,21 +921,7 @@ export const FACE_MESH_TRIANGLES = [
 ];
 
 /**
- * Iris landmark indices
- * These are the additional landmarks beyond the base 468 face landmarks
+ * Iris center landmark indices (beyond the base 468 face landmarks)
  */
 export const IRIS_LEFT_CENTER = 468;
-export const IRIS_LEFT_BOUNDARY_START = 469;
-export const IRIS_LEFT_BOUNDARY_END = 472;
-
 export const IRIS_RIGHT_CENTER = 473;
-export const IRIS_RIGHT_BOUNDARY_START = 474;
-export const IRIS_RIGHT_BOUNDARY_END = 477;
-
-/**
- * Triangle indices for iris meshes
- * Last 8 triangles of FACE_MESH_TRIANGLES are iris-specific
- */
-export const IRIS_TRIANGLES_START = 898; // First iris triangle index
-export const IRIS_LEFT_TRIANGLES_START = 898; // Triangles 898-901 (4 triangles)
-export const IRIS_RIGHT_TRIANGLES_START = 902; // Triangles 902-905 (4 triangles)

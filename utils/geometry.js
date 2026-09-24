@@ -14,7 +14,7 @@ const EPSILON = 1e-3;
  * @param {Point} b - Second point
  * @returns {number} Distance in pixels
  */
-export function distanceBetweenPoints(a, b) {
+function distanceBetweenPoints(a, b) {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
   return Math.hypot(dx, dy);
@@ -26,7 +26,7 @@ export function distanceBetweenPoints(a, b) {
  * @param {Point} p2 - Second point
  * @returns {Circle} Circle with center at midpoint
  */
-export function circleFromTwoPoints(p1, p2) {
+function circleFromTwoPoints(p1, p2) {
   return {
     center: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 },
     radius: distanceBetweenPoints(p1, p2) / 2,
@@ -40,7 +40,7 @@ export function circleFromTwoPoints(p1, p2) {
  * @param {Point} p3 - Third point
  * @returns {Circle|null} Circumcircle or null if points are collinear
  */
-export function circleFromThreePoints(p1, p2, p3) {
+function circleFromThreePoints(p1, p2, p3) {
   const d =
     2 *
     (p1.x * (p2.y - p3.y) +
@@ -71,7 +71,7 @@ export function circleFromThreePoints(p1, p2, p3) {
  * @param {Circle|null} circle - Circle to test against
  * @returns {boolean} True if point is inside or on circle boundary
  */
-export function isPointInsideCircle(point, circle) {
+function isPointInsideCircle(point, circle) {
   if (!circle) return false;
   return distanceBetweenPoints(point, circle.center) <= circle.radius + EPSILON;
 }

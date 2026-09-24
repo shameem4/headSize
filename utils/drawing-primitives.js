@@ -5,12 +5,10 @@
  * Provides low-level drawing primitives for canvas rendering:
  * - Label drawing with leaders and collision awareness
  * - Rail segments (offset lines with labels)
- * - Smooth curves through point sequences
  */
 
 import {
   isFinitePoint,
-  normalize,
   translate,
   uprightAngle,
   resolveOrientation,
@@ -18,68 +16,6 @@ import {
 import { LABEL_FONT } from "../config.js";
 
 /** @typedef {{x: number, y: number}} Point */
-
-// ============================================================================
-// MEASUREMENT BOX DRAWING
-// ============================================================================
-
-/**
- * Draw a measurement box with background and text
- * Similar to the reference image style with colored boxes
- *
- * @param {CanvasRenderingContext2D} ctx - Canvas context
- * @param {string} text - Measurement text
- * @param {Point} position - Box position (center)
- * @param {Object} opts - Drawing options
- * @param {string} [opts.color="#fff"] - Text and border color
- * @param {string} [opts.backgroundColor="rgba(0,0,0,0.7)"] - Box background
- * @param {number} [opts.padding=6] - Box padding
- * @param {number} [opts.borderRadius=4] - Corner radius
- * @param {number} [opts.fontSize=14] - Font size in pixels
- */
-export function drawMeasurementBox(ctx, text, position, opts = {}) {
-  if (!text || !isFinitePoint(position)) return;
-
-  const color = opts.color || "#fff";
-  const bgColor = opts.backgroundColor || "rgba(0, 0, 0, 0.7)";
-  const padding = opts.padding ?? 6;
-  const borderRadius = opts.borderRadius ?? 4;
-  const fontSize = opts.fontSize ?? 14;
-  const font = `bold ${fontSize}px 'Segoe UI', sans-serif`;
-
-  ctx.save();
-  ctx.font = font;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  // Measure text
-  const metrics = ctx.measureText(text);
-  const textWidth = metrics.width;
-  const textHeight = fontSize;
-
-  // Box dimensions
-  const boxWidth = textWidth + padding * 2;
-  const boxHeight = textHeight + padding * 2;
-  const x = position.x - boxWidth / 2;
-  const y = position.y - boxHeight / 2;
-
-  // Draw background box with rounded corners
-  ctx.fillStyle = bgColor;
-  ctx.beginPath();
-  ctx.roundRect(x, y, boxWidth, boxHeight, borderRadius);
-  ctx.fill();
-
-  // Draw border
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  // Draw text
-  ctx.fillStyle = color;
-  ctx.fillText(text, position.x, position.y);
-
-  ctx.restore();
-}
 
 // ============================================================================
 // LABEL DRAWING
@@ -101,7 +37,7 @@ export function drawMeasurementBox(ctx, text, position, opts = {}) {
  * @param {string} [opts.leader.color] - Leader color (defaults to text color)
  * @param {number} [opts.leader.lineWidth=1.5] - Leader line width
  */
-export function drawLabel(ctx, text, position, opts = {}) {
+function drawLabel(ctx, text, position, opts = {}) {
   if (!text || !isFinitePoint(position)) return;
 
   ctx.save();
@@ -130,25 +66,6 @@ export function drawLabel(ctx, text, position, opts = {}) {
   }
 
   ctx.restore();
-}
-
-/**
- * Measure label dimensions for collision detection
- * @param {CanvasRenderingContext2D} ctx - Canvas context
- * @param {string} text - Text to measure
- * @param {string} [font] - Font string (defaults to LABEL_FONT)
- * @returns {{width: number, height: number}} Label dimensions
- */
-export function measureLabel(ctx, text, font) {
-  ctx.save();
-  ctx.font = font || LABEL_FONT;
-  const m = ctx.measureText(text);
-  ctx.restore();
-
-  const height =
-    (m.actualBoundingBoxAscent || 0) + (m.actualBoundingBoxDescent || 0) || 18;
-
-  return { width: m.width, height };
 }
 
 // ============================================================================
@@ -294,39 +211,4 @@ export function drawRailSegment(
   }
 
   return geom;
-}
-
-// ============================================================================
-// CURVE DRAWING
-// ============================================================================
-
-/**
- * Draw a smooth Catmull-Rom-style curve through a sequence of points
- *
- * @param {CanvasRenderingContext2D} ctx - Canvas context
- * @param {Point[]} points - Array of points to connect with curve
- */
-export function drawSmoothCurve(ctx, points) {
-  const pts = points.filter(isFinitePoint);
-  if (pts.length < 2) return;
-
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] || pts[i];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2] || p2;
-
-    // Calculate control points for smooth Bézier curve
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
-  }
-
-  ctx.stroke();
 }

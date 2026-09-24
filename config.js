@@ -1,23 +1,7 @@
 /**
  * Centralized Configuration for headSize Application
  * @module config
- *
- * This file contains all configuration settings organized into logical sections.
- * Modify values here to customize application behavior, appearance, and measurements.
  */
-
-// ============================================================================
-// APPLICATION SETTINGS
-// ============================================================================
-
-/**
- * Application-wide settings
- */
-export const APP_CONFIG = {
-  name: "headSize",
-  version: "2.0.0",
-  debug: false, // Set to true to enable console logging
-};
 
 // ============================================================================
 // CAMERA & VIDEO SETTINGS
@@ -79,7 +63,7 @@ export const CAMERA_CONFIG = {
  * Reference: https://developers.google.com/mediapipe/solutions/vision/face_landmarker
  */
 export const HEAD_CONFIG = {
-  // Nose grid for detailed nose measurements
+  // Nose grid for detailed nose measurements (row order matters)
   noseGridIndices: {
     topRow: [105, 66, 107, 9, 336, 296, 334],
     browRow: [52, 65, 55, 8, 285, 295, 282],
@@ -147,83 +131,13 @@ export const COLOR_CONFIG = {
 
   // Face measurement color
   faceWidth: "#FFFFFF",  // White - face width
-
-  // UI element colors
-  ui: {
-    background: "rgba(0, 0, 0, 0.65)",
-    border: "rgba(255, 255, 255, 0.2)",
-    text: "#FFFFFF",
-    accent: "#00FFC8",
-  },
 };
 
-/**
- * Typography settings
- */
-export const TYPOGRAPHY = {
-  labelFont: "bold 18px 'Segoe UI', sans-serif",
-  titleFont: "600 16px 'Segoe UI', sans-serif",
-  bodyFont: "400 14px 'Segoe UI', sans-serif",
-};
-
-// Backward compatibility
-export const LABEL_FONT = TYPOGRAPHY.labelFont;
+export const LABEL_FONT = "bold 18px 'Segoe UI', sans-serif";
 
 // ============================================================================
 // OVERLAY & RENDERING SETTINGS
 // ============================================================================
-
-/**
- * Nose overlay positioning and styling
- */
-export const NOSE_OVERLAY_CONFIG = {
-  // Grid styling
-  grid: {
-    color: "#ffffff63",  // Semi-transparent white
-    lineWidth: 1.5,
-  },
-
-  // Bracket offsets
-  horizontalBracket: {
-    lineOffset: 8,
-    labelPadding: 6,
-  },
-
-  padHeight: {
-    horizontalInset: -100,
-    labelGap: -15,
-  },
-
-  // Angle overlays
-  padAngle: {
-    radius: 28,
-    arcWidth: 2,
-    armWidth: 2,
-    labelPad: 10,
-    leader: true,
-    leaderWidth: 1.25,
-  },
-
-  flareAngle: {
-    baseOffsetY: 12,
-    radius: 30,
-    arcWidth: 2,
-    armWidth: 2,
-    labelPad: 12,
-    leader: true,
-    leaderWidth: 1.25,
-  },
-};
-
-// Backward compatibility
-export const NOSE_OVERLAY_OFFSETS = {
-  horizontalBracket: NOSE_OVERLAY_CONFIG.horizontalBracket,
-  padHeight: NOSE_OVERLAY_CONFIG.padHeight,
-  padAngle: NOSE_OVERLAY_CONFIG.padAngle,
-  flareAngle: NOSE_OVERLAY_CONFIG.flareAngle,
-};
-
-export const NOSE_GRID_STYLE = NOSE_OVERLAY_CONFIG.grid;
 
 /**
  * IPD (Interpupillary Distance) overlay configuration
@@ -251,7 +165,6 @@ export const FACE_OVERLAY_CONFIG = {
 export const EYE_WIDTH_OVERLAY_CONFIG = {
   railOffset: 120,
   textLift: -20,
-  textAlign: "center",
   drawRail: true,
 };
 
@@ -259,15 +172,12 @@ export const EYE_WIDTH_OVERLAY_CONFIG = {
  * Default render policy settings
  */
 export const RENDER_POLICY = {
-  detailLevel: "standard",   // "minimal" | "standard" | "full"
   focus: "face",             // "global" | "face" | "eyes" | "nose"
   maxLeaders: 1,             // Maximum number of leader lines
-  minAngleDeg: 8,            // Minimum angle to display (reduces clutter)
   compact: {
     alphaSecondary: 0.55,    // Opacity for non-focused elements
     shortenLabels: true,     // Use abbreviated labels
     hideRailConnectors: true, // Hide rail connector lines
-    showAngleArms: false,    // Hide angle arm lines
   },
 };
 
@@ -282,36 +192,16 @@ export const UI_CONFIG = {
   // Mirror mode (selfie view)
   mirrorEnabled: true,
 
-  // Nose overlay visibility
-  noseOverlayEnabled: true,
-
   // Rendering mode
-  renderMode: "canvas2d",  // "canvas2d" | "threejs" | "hybrid"
-
-  // Metrics panel
-  metricsPanel: {
-    enabled: true,
-    position: "right",  // "left" | "right"
-  },
-
-  // Video display
-  video: {
-    borderRadius: "24px",
-    maxWidth: "100vw",
-    maxHeight: "100vh",
-  },
+  renderMode: "canvas2d",  // "canvas2d" | "hybrid"
 };
 
 /**
- * Three.js 3D visualization configuration
+ * Three.js 3D overlay configuration
  */
 export const THREEJS_CONFIG = {
-  // Enable 3D visualization
-  enabled: true,
-
   // 3D head model
   headModel: {
-    enabled: true,
     opacity: 0.5,
     wireframe: false,
     color: 0x88ccff,
@@ -322,214 +212,27 @@ export const THREEJS_CONFIG = {
 
   // Landmark visualization
   landmarks: {
-    enabled: true,
+    visible: true,
     size: 2.5,
     color: 0xffffff,
     opacity: 0.8,
   },
 
-  // Camera controls (not used in overlay mode)
-  camera: {
-    fov: 45,
-    near: 0.1,
-    far: 5000,
-    position: { x: 0, y: 0, z: 1000 },
-    controls: {
-      enabled: false, // Disabled - mesh follows face motion automatically
-      enableDamping: true,
-      dampingFactor: 0.05,
-      rotateSpeed: 0.5,
-      zoomSpeed: 1.2,
-      panSpeed: 0.8,
-      minDistance: 400,
-      maxDistance: 2500,
-    },
-  },
-
   // Lighting
   lights: {
     ambient: {
-      enabled: true,
       color: 0xffffff,
       intensity: 0.6,
     },
     directional: {
-      enabled: true,
       color: 0xffffff,
       intensity: 0.8,
       position: { x: 100, y: 100, z: 100 },
     },
     point: {
-      enabled: true,
       color: 0xffffff,
       intensity: 0.5,
       position: { x: -100, y: -100, z: 100 },
     },
   },
-
-  // Scene
-  scene: {
-    background: null, // Transparent - show video through 3D mesh
-    fog: {
-      enabled: false,
-      color: 0x1a1a1a,
-      near: 500,
-      far: 1500,
-    },
-  },
-
-  // Grid helper (disabled for overlay mode)
-  grid: {
-    enabled: false,
-    size: 500,
-    divisions: 20,
-    colorCenterLine: 0x444444,
-    colorGrid: 0x222222,
-  },
-
-  // Axes helper (disabled for overlay mode)
-  axes: {
-    enabled: false,
-    size: 100,
-  },
-
-  // Measurement overlays in 3D
-  measurements3D: {
-    enabled: true,
-    scale: 1.0,
-    depthTest: false,  // Always visible on top
-  },
 };
-
-// ============================================================================
-// VALIDATION
-// ============================================================================
-
-/**
- * Validate all configuration objects
- * @throws {Error} If any configuration is invalid
- * @returns {boolean} True if all validations pass
- */
-export function validateConfig() {
-  const errors = [];
-
-  // Validate APP_CONFIG
-  if (!APP_CONFIG.name || typeof APP_CONFIG.name !== "string") {
-    errors.push("APP_CONFIG.name must be a non-empty string");
-  }
-  if (!APP_CONFIG.version || typeof APP_CONFIG.version !== "string") {
-    errors.push("APP_CONFIG.version must be a non-empty string");
-  }
-
-  // Validate CAMERA_CONFIG
-  if (!CAMERA_CONFIG.videoSize || typeof CAMERA_CONFIG.videoSize !== "object") {
-    errors.push("CAMERA_CONFIG.videoSize must be an object");
-  } else {
-    if (CAMERA_CONFIG.videoSize.width <= 0 || CAMERA_CONFIG.videoSize.height <= 0) {
-      errors.push("CAMERA_CONFIG.videoSize dimensions must be positive");
-    }
-  }
-
-  if (CAMERA_CONFIG.irisDiameterMm <= 0) {
-    errors.push("CAMERA_CONFIG.irisDiameterMm must be positive");
-  }
-
-  if (typeof CAMERA_CONFIG.focalLengthScale !== "function") {
-    errors.push("CAMERA_CONFIG.focalLengthScale must be a function");
-  }
-
-  if (CAMERA_CONFIG.distanceSmoothing < 0 || CAMERA_CONFIG.distanceSmoothing > 1) {
-    errors.push("CAMERA_CONFIG.distanceSmoothing must be between 0 and 1");
-  }
-
-  // Validate HEAD_CONFIG
-  if (!HEAD_CONFIG.noseGridIndices || typeof HEAD_CONFIG.noseGridIndices !== "object") {
-    errors.push("HEAD_CONFIG.noseGridIndices must be an object");
-  }
-
-  if (!HEAD_CONFIG.faceWidthIdx ||
-      typeof HEAD_CONFIG.faceWidthIdx.left !== "number" ||
-      typeof HEAD_CONFIG.faceWidthIdx.right !== "number") {
-    errors.push("HEAD_CONFIG.faceWidthIdx must have numeric left and right properties");
-  }
-
-  if (!HEAD_CONFIG.iris || !HEAD_CONFIG.iris.left || !HEAD_CONFIG.iris.right) {
-    errors.push("HEAD_CONFIG.iris must have left and right iris configurations");
-  }
-
-  // Validate COLOR_CONFIG
-  if (!COLOR_CONFIG || typeof COLOR_CONFIG !== "object") {
-    errors.push("COLOR_CONFIG must be an object");
-  }
-
-  // Validate RENDER_POLICY
-  const validDetailLevels = ["minimal", "standard", "full"];
-  if (!validDetailLevels.includes(RENDER_POLICY.detailLevel)) {
-    errors.push(`RENDER_POLICY.detailLevel must be one of: ${validDetailLevels.join(", ")}`);
-  }
-
-  const validFocusModes = ["global", "face", "eyes", "nose"];
-  if (!validFocusModes.includes(RENDER_POLICY.focus)) {
-    errors.push(`RENDER_POLICY.focus must be one of: ${validFocusModes.join(", ")}`);
-  }
-
-  // Throw combined error if any validations failed
-  if (errors.length > 0) {
-    throw new Error(`Configuration validation failed:\n- ${errors.join("\n- ")}`);
-  }
-
-  return true;
-}
-
-/**
- * Get a configuration value by path (e.g., "CAMERA_CONFIG.videoSize.width")
- * @param {string} path - Dot-separated path to configuration value
- * @returns {*} Configuration value or undefined if not found
- */
-export function getConfig(path) {
-  const parts = path.split(".");
-  let current = {
-    APP_CONFIG,
-    CAMERA_CONFIG,
-    HEAD_CONFIG,
-    COLOR_CONFIG,
-    TYPOGRAPHY,
-    NOSE_OVERLAY_CONFIG,
-    IPD_OVERLAY_CONFIG,
-    FACE_OVERLAY_CONFIG,
-    EYE_WIDTH_OVERLAY_CONFIG,
-    RENDER_POLICY,
-    UI_CONFIG,
-    THREEJS_CONFIG,
-  };
-
-  for (const part of parts) {
-    if (current[part] === undefined) return undefined;
-    current = current[part];
-  }
-
-  return current;
-}
-
-/**
- * Export all configuration as a single object for debugging
- */
-export const ALL_CONFIG = {
-  APP_CONFIG,
-  CAMERA_CONFIG,
-  HEAD_CONFIG,
-  COLOR_CONFIG,
-  TYPOGRAPHY,
-  NOSE_OVERLAY_CONFIG,
-  IPD_OVERLAY_CONFIG,
-  FACE_OVERLAY_CONFIG,
-  EYE_WIDTH_OVERLAY_CONFIG,
-  RENDER_POLICY,
-  UI_CONFIG,
-  THREEJS_CONFIG,
-};
-
-// Log configuration in debug mode
-if (APP_CONFIG.debug) {
-  console.log("Configuration loaded:", ALL_CONFIG);
-}

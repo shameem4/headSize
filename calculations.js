@@ -1,69 +1,15 @@
-import {
-  minEnclosingCircle,
-} from "./utils/geometry.js";
+import { minEnclosingCircle } from "./utils/geometry.js";
 
 // ============================================================================
 // CONVERSION UTILITIES
 // ============================================================================
 
-function pixelsPerMillimeter(pixelLength, irisDiameterMm = 11.7) {
-  return pixelLength > 0 ? pixelLength / irisDiameterMm : null;
-}
-
-function millimetersPerPixel(pixelLength, irisDiameterMm = 11.7) {
-  const pxPerMm = pixelsPerMillimeter(pixelLength, irisDiameterMm);
-  return pxPerMm ? 1 / pxPerMm : null;
-}
-
-function estimateCameraDistanceCm(diameterPx, focalLengthPx, irisDiameterMm = 11.7) {
-  const mmPerPx = millimetersPerPixel(diameterPx, irisDiameterMm);
-  if (!mmPerPx) return null;
+export function estimateCameraDistanceCm(diameterPx, focalLengthPx, irisDiameterMm) {
+  if (!(diameterPx > 0)) return null;
+  const mmPerPx = irisDiameterMm / diameterPx;
   const distanceX = (focalLengthPx.x * mmPerPx) / 10;
   const distanceY = (focalLengthPx.y * mmPerPx) / 10;
   return (distanceX + distanceY) / 2;
-}
-
-// ============================================================================
-// POSE UTILITIES
-// ============================================================================
-
-function extractRotation(matrixData) {
-  if (!matrixData || matrixData.length < 9) return null;
-  const r00 = matrixData[0];
-  const r01 = matrixData[1];
-  const r02 = matrixData[2];
-  const r10 = matrixData[4];
-  const r11 = matrixData[5];
-  const r12 = matrixData[6];
-  const r20 = matrixData[8];
-  const r21 = matrixData[9];
-  const r22 = matrixData[10];
-
-  const sy = Math.sqrt(r00 * r00 + r10 * r10);
-  const singular = sy < 1e-6;
-
-  let x;
-  let y;
-  let z;
-  if (!singular) {
-    x = Math.atan2(r21, r22);
-    y = Math.atan2(-r20, sy);
-    z = Math.atan2(r10, r00);
-  } else {
-    x = Math.atan2(-r12, r11);
-    y = Math.atan2(-r20, sy);
-    z = 0;
-  }
-  return {
-    pitch: (x * 180) / Math.PI,
-    yaw: (y * 180) / Math.PI,
-    roll: (z * 180) / Math.PI,
-    rotationMatrix: [
-      [r00, r01, r02],
-      [r10, r11, r12],
-      [r20, r21, r22],
-    ],
-  };
 }
 
 // ============================================================================
@@ -79,7 +25,7 @@ function projectLandmark(landmarks, index, canvasWidth, canvasHeight) {
   };
 }
 
-function buildLandmarkPair(landmarks, indexMap, canvasWidth, canvasHeight) {
+export function buildLandmarkPair(landmarks, indexMap, canvasWidth, canvasHeight) {
   if (!landmarks || !indexMap) return null;
   const entries = Object.entries(indexMap);
   const result = {};
@@ -91,31 +37,12 @@ function buildLandmarkPair(landmarks, indexMap, canvasWidth, canvasHeight) {
   return result;
 }
 
-function buildNoseGridPoints(landmarks, noseIndices, canvasWidth, canvasHeight) {
-  if (!landmarks || !noseIndices) return null;
-  const projectIdx = (idx) =>
-    typeof idx === "number" ? projectLandmark(landmarks, idx, canvasWidth, canvasHeight) : null;
-
-  const mapRow = (row) => {
-    if (!Array.isArray(row)) return null;
-    return row.map((idx) => projectIdx(idx));
-  };
-
-  if (Array.isArray(noseIndices)) {
-    return noseIndices.map((row) => mapRow(row));
-  }
-
-  if (Array.isArray(noseIndices.rows)) {
-    return noseIndices.rows.map((row) => mapRow(row));
-  }
-
-  const mapped = {};
+export function buildNoseGridPoints(landmarks, noseIndices, canvasWidth, canvasHeight) {
+  const grid = {};
   for (const [key, row] of Object.entries(noseIndices)) {
-    const projected = mapRow(row);
-    if (!projected) continue;
-    mapped[key] = projected;
+    grid[key] = row.map((idx) => projectLandmark(landmarks, idx, canvasWidth, canvasHeight));
   }
-  return Object.keys(mapped).length ? mapped : null;
+  return grid;
 }
 
 // ============================================================================
@@ -186,7 +113,7 @@ function calculateAngleDeg(vecA, vecB) {
  * Compute nose metrics with optimizations
  * OPTIMIZED: Removed IIFEs, cached calculations, single-pass logic
  */
-function computeNoseMetrics(gridPoints, mmPerPx) {
+export function computeNoseMetrics(gridPoints, mmPerPx) {
   // Early validation
   if (!gridPoints || !Number.isFinite(mmPerPx) || mmPerPx <= 0) return null;
 
@@ -203,8 +130,7 @@ function computeNoseMetrics(gridPoints, mmPerPx) {
   const padHeightMm = Math.abs(padRow.midY - bridgeRow.midY) * mmPerPx;
 
   // Get ordered rows for angle calculations
-  const isArrayGrid = Array.isArray(gridPoints);
-  const orderedRows = isArrayGrid ? gridPoints : Object.values(gridPoints);
+  const orderedRows = Object.values(gridPoints);
   const rowCount = orderedRows.length;
 
   // Find column reference and midpoint
@@ -312,7 +238,7 @@ function computeNoseMetrics(gridPoints, mmPerPx) {
 /**
  * Extract eye segment (optimized: cached calculations)
  */
-function extractEyeSegment(landmarks, idxPair, canvasWidth, canvasHeight) {
+export function extractEyeSegment(landmarks, idxPair, canvasWidth, canvasHeight) {
   const a = landmarks[idxPair[0]];
   const b = landmarks[idxPair[1]];
   if (!a || !b) return null;
@@ -334,7 +260,7 @@ function extractEyeSegment(landmarks, idxPair, canvasWidth, canvasHeight) {
 /**
  * Build IPD measurement (optimized: Math.hypot instead of manual sqrt)
  */
-function buildIpdMeasurement(leftIris, rightIris, mmPerPx) {
+export function buildIpdMeasurement(leftIris, rightIris, mmPerPx) {
   if (!leftIris || !rightIris || !Number.isFinite(mmPerPx)) return null;
 
   const dxPx = rightIris.center.x - leftIris.center.x;
@@ -355,7 +281,7 @@ function buildIpdMeasurement(leftIris, rightIris, mmPerPx) {
 /**
  * Build face width measurement (optimized: removed unnecessary spread)
  */
-function buildFaceWidthMeasurement(points, mmPerPx) {
+export function buildFaceWidthMeasurement(points, mmPerPx) {
   if (!points?.left || !points?.right || !Number.isFinite(mmPerPx)) return null;
 
   const faceWidthPx = Math.hypot(
@@ -376,7 +302,7 @@ function buildFaceWidthMeasurement(points, mmPerPx) {
 /**
  * Build eye width measurement (optimized: removed unnecessary map spread)
  */
-function buildEyeWidthMeasurement(segment, mmPerPx) {
+export function buildEyeWidthMeasurement(segment, mmPerPx) {
   if (!segment?.pxLength || !Number.isFinite(mmPerPx)) return null;
 
   return {
@@ -388,14 +314,7 @@ function buildEyeWidthMeasurement(segment, mmPerPx) {
 /**
  * Compute iris measurement (optimized: reduced allocations)
  */
-function computeIrisMeasurement(
-  landmarks,
-  irisIdx,
-  pupilIdx,
-  canvasWidth,
-  canvasHeight,
-  estimateDistanceFn
-) {
+export function computeIrisMeasurement(landmarks, irisIdx, pupilIdx, canvasWidth, canvasHeight) {
   const pupil = landmarks?.[pupilIdx];
   if (!pupil || !Array.isArray(irisIdx) || irisIdx.length !== 4) return null;
 
@@ -416,45 +335,11 @@ function computeIrisMeasurement(
   const circle = minEnclosingCircle(irisPts);
   if (!circle || circle.radius <= 0) return null;
 
-  const diameter = circle.radius * 2;
-  const distanceCm =
-    typeof estimateDistanceFn === "function" ? estimateDistanceFn(diameter) : null;
-
   return {
-    distanceCm,
-    diameterPx: diameter,
+    diameterPx: circle.radius * 2,
     center: {
       x: circle.center.x,
       y: circle.center.y,
     },
   };
 }
-
-// ============================================================================
-// EXPORTS
-// ============================================================================
-
-export const ConversionUtils = {
-  pixelsPerMillimeter,
-  millimetersPerPixel,
-  estimateCameraDistanceCm,
-};
-
-export const PoseUtils = {
-  extractRotation,
-};
-
-export const ProjectionUtils = {
-  projectLandmark,
-  buildLandmarkPair,
-  buildNoseGridPoints,
-};
-
-export const MeasurementBuilders = {
-  computeNoseMetrics,
-  extractEyeSegment,
-  buildIpdMeasurement,
-  buildFaceWidthMeasurement,
-  buildEyeWidthMeasurement,
-  computeIrisMeasurement,
-};

@@ -5,7 +5,7 @@
  * Provides geometry and math helpers specifically for graphics rendering:
  * - Point validation and transformations
  * - Vector operations (normalize, perpendicular, translate)
- * - Angle calculations and conversions
+ * - Upright text angles and orientation resolution
  */
 
 /** @typedef {{x: number, y: number}} Point */
@@ -34,7 +34,7 @@ export function isFinitePoint(p) {
  * @param {number} vy - Y component of vector
  * @returns {Vector} Normalized unit vector
  */
-export function normalize(vx, vy) {
+function normalize(vx, vy) {
   const len = Math.hypot(vx, vy);
   if (!len) return { x: 0, y: 0 };
   return { x: vx / len, y: vy / len };
@@ -45,7 +45,7 @@ export function normalize(vx, vy) {
  * @param {Vector} v - Input vector
  * @returns {Vector} Perpendicular vector
  */
-export function perp(v) {
+function perp(v) {
   return { x: -v.y, y: v.x };
 }
 
@@ -77,42 +77,6 @@ export function uprightAngle(theta) {
     return theta + Math.PI;
   }
   return theta;
-}
-
-/**
- * Calculate angle from point o to point p
- * @param {Point} p - Target point
- * @param {Point} o - Origin point
- * @returns {number} Angle in radians
- */
-export function angleOf(p, o) {
-  return Math.atan2(p.y - o.y, p.x - o.x);
-}
-
-/**
- * Calculate smallest signed angle difference from a to b
- * @param {number} a - Start angle in radians
- * @param {number} b - End angle in radians
- * @returns {number} Angle delta in radians, range [-π, π]
- */
-export function angleDelta(a, b) {
-  let d = ((b - a + Math.PI) % (2 * Math.PI)) - Math.PI;
-  if (d < -Math.PI) d += 2 * Math.PI;
-  return d;
-}
-
-/**
- * Get a point on a ray from origin at given angle and distance
- * @param {Point} origin - Ray origin
- * @param {number} angle - Ray angle in radians
- * @param {number} dist - Distance along ray
- * @returns {Point} Point on ray
- */
-export function pointOnRay(origin, angle, dist) {
-  return {
-    x: origin.x + Math.cos(angle) * dist,
-    y: origin.y + Math.sin(angle) * dist,
-  };
 }
 
 // ============================================================================

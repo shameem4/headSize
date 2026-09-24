@@ -4,8 +4,8 @@
  */
 
 import { createGraphics } from "../graphics.js";
-import { formatMm, formatDeg, formatCm, safeColor } from "../utils/formatters.js";
-import { COLOR_CONFIG, IPD_OVERLAY_CONFIG, UI_CONFIG } from "../config.js";
+import { formatMm, formatDeg, formatCm } from "../utils/formatters.js";
+import { COLOR_CONFIG, IPD_OVERLAY_CONFIG } from "../config.js";
 
 /**
  * Manages UI elements, DOM references, and metrics panel rendering
@@ -17,20 +17,11 @@ export class UIManager {
     this.canvasElement = document.getElementById("output_canvas");
     this.canvasCtx = this.canvasElement.getContext("2d");
 
-    // Control elements
-    this.noseOverlayToggleEl = document.getElementById("nose_overlay_toggle");
-    this.mirrorToggleEl = document.getElementById("mirror_toggle");
-    this.mirrorPanelEl = document.getElementById("mirror_panel");
-
-    // Metrics panel elements
-    this.metricsPanelEl = document.getElementById("metrics_panel");
+    // Metrics panel body
     this.metricsPanelBodyEl = document.getElementById("metrics_panel_body");
 
     // Graphics renderer
-    this.graphics = createGraphics(this.canvasElement, this.canvasCtx);
-
-    // Event callbacks
-    this.callbacks = {};
+    this.graphics = createGraphics(this.canvasCtx);
   }
 
   /**
@@ -39,28 +30,16 @@ export class UIManager {
    */
   getVideoDimensions() {
     return {
-      width: this.video?.videoWidth || 1280,
-      height: this.video?.videoHeight || 720,
+      width: this.video.videoWidth || 1280,
+      height: this.video.videoHeight || 720,
     };
-  }
-
-  /**
-   * Synchronize canvas resolution with video
-   */
-  syncCanvasResolution() {
-    const { width, height } = this.getVideoDimensions();
-    if (this.canvasElement.width !== width) this.canvasElement.width = width;
-    if (this.canvasElement.height !== height) this.canvasElement.height = height;
   }
 
   /**
    * Resize display to fit container while maintaining aspect ratio
    */
   resizeDisplayToContainer() {
-    const container =
-      document.querySelector(".videoView") ||
-      document.getElementById("liveView") ||
-      document.body;
+    const container = document.getElementById("liveView");
 
     const rect = container.getBoundingClientRect();
     const targetW = Math.max(1, Math.floor(rect.width));
@@ -81,8 +60,7 @@ export class UIManager {
     const dpr = window.devicePixelRatio || 1;
     this.canvasElement.width = Math.round(w * dpr);
     this.canvasElement.height = Math.round(h * dpr);
-    const ctx = this.canvasElement.getContext("2d");
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.canvasCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   /**
@@ -100,8 +78,6 @@ export class UIManager {
    * @param {number|null} distanceCm - Camera distance in centimeters
    */
   renderMetricsPanel(state, distanceCm) {
-    if (!this.metricsPanelEl || !this.metricsPanelBodyEl) return;
-
     // Distance card
     const distanceCard = `
       <div class="metric-card">
@@ -131,12 +107,11 @@ export class UIManager {
     // IPD card
     const ipd = state.ipd;
     let ipdRows = "";
-    if (ipd && Array.isArray(IPD_OVERLAY_CONFIG.rails)) {
-      const ipdColors = COLOR_CONFIG.ipd || {};
+    if (ipd) {
       ipdRows = IPD_OVERLAY_CONFIG.rails
         .map(({ key, label }) => {
-          const val = formatMm(ipd?.[key]);
-          const color = safeColor(ipdColors[key]);
+          const val = formatMm(ipd[key]);
+          const color = COLOR_CONFIG.ipd[key];
           return `<div class="metric-row" style="color:${color}"><span class="label">${label}</span><span class="value">${val}</span></div>`;
         })
         .join("");
@@ -149,15 +124,15 @@ export class UIManager {
 
     // Nose card
     const NM = state.nose || {};
-    const NCLR = COLOR_CONFIG.noseMetrics || {};
+    const NCLR = COLOR_CONFIG.noseMetrics;
     const noseCard = `
       <div class="metric-card">
         <h2>Nose</h2>
-        <div class="metric-row" style="color:${safeColor(NCLR.bridge)}"><span class="label">Bridge width</span><span class="value">${formatMm(NM.bridgeWidthMm)}</span></div>
-        <div class="metric-row" style="color:${safeColor(NCLR.padSpan)}"><span class="label">Pad width</span><span class="value">${formatMm(NM.padSpanMm)}</span></div>
-        <div class="metric-row" style="color:${safeColor(NCLR.padHeight)}"><span class="label">Pad height</span><span class="value">${formatMm(NM.padHeightMm)}</span></div>
-        <div class="metric-row" style="color:${safeColor(NCLR.padAngle)}"><span class="label">Pad angle</span><span class="value">${formatDeg(NM.padAngleDeg)}</span></div>
-        <div class="metric-row" style="color:${safeColor(NCLR.flareAngle)}"><span class="label">Flare angle</span><span class="value">${formatDeg(NM.flareAngleDeg)}</span></div>
+        <div class="metric-row" style="color:${NCLR.bridge}"><span class="label">Bridge width</span><span class="value">${formatMm(NM.bridgeWidthMm)}</span></div>
+        <div class="metric-row" style="color:${NCLR.padSpan}"><span class="label">Pad width</span><span class="value">${formatMm(NM.padSpanMm)}</span></div>
+        <div class="metric-row" style="color:${NCLR.padHeight}"><span class="label">Pad height</span><span class="value">${formatMm(NM.padHeightMm)}</span></div>
+        <div class="metric-row" style="color:${NCLR.padAngle}"><span class="label">Pad angle</span><span class="value">${formatDeg(NM.padAngleDeg)}</span></div>
+        <div class="metric-row" style="color:${NCLR.flareAngle}"><span class="label">Flare angle</span><span class="value">${formatDeg(NM.flareAngleDeg)}</span></div>
       </div>`;
 
     this.metricsPanelBodyEl.innerHTML = distanceCard + faceCard + eyesCard + ipdCard + noseCard;
@@ -167,26 +142,12 @@ export class UIManager {
    * Setup all event listeners with provided callbacks
    * @param {Object} callbacks - Object containing callback functions
    * @param {Function} callbacks.onFocusChange - Called when focus radio changes
-   * @param {Function} callbacks.onMirrorToggle - Called when mirror toggle changes
    */
   setupEventListeners(callbacks) {
-    this.callbacks = callbacks;
-
     // Focus radio buttons
     document.querySelectorAll('input[name="focus"]').forEach((radio) => {
-      radio.addEventListener("change", (e) => {
-        if (callbacks.onFocusChange) {
-          callbacks.onFocusChange(e.target.value);
-        }
-      });
+      radio.addEventListener("change", (e) => callbacks.onFocusChange(e.target.value));
     });
-
-    // Mirror toggle
-    if (this.mirrorToggleEl && callbacks.onMirrorToggle) {
-      this.mirrorToggleEl.addEventListener("change", (event) => {
-        callbacks.onMirrorToggle(Boolean(event.target?.checked));
-      });
-    }
 
     // Window resize
     window.addEventListener("resize", () => this.resizeDisplayToContainer());
@@ -197,13 +158,7 @@ export class UIManager {
    * @param {boolean} enabled - Whether mirroring is enabled
    */
   applyMirrorSetting(enabled) {
-    if (this.mirrorToggleEl) {
-      this.mirrorToggleEl.checked = enabled;
-    }
-    if (this.video) {
-      this.video.classList.toggle("mirrored", enabled);
-    }
-    this.mirrorPanelEl?.classList.add("visible");
+    this.video.classList.toggle("mirrored", enabled);
   }
 
   /**

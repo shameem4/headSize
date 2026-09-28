@@ -75,4 +75,4 @@ The earlier React/Vite version is preserved in the `archive/main-vite` tag.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) (non-commercial), see [LICENSE](LICENSE).

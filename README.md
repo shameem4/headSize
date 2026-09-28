@@ -4,6 +4,8 @@ Measures facial dimensions in the browser from a webcam feed using MediaPipe Fac
 
 Demo: https://shameem4.github.io/headSize/ · Article: [Measuring the human face privately in the browser](https://www.linkedin.com/pulse/measuring-human-face-privately-browser-shameem-hameed-51okc/)
 
+**Follow-up: [headSize-gnm](https://github.com/shameem4/headSize-gnm)** ([demo](https://shameem4.github.io/headSize-gnm/)). It fits a 3D head model (Google's GNM Head) to the face to estimate the whole head: hat size, glasses arm length, headphone bands and ear size, still entirely in the browser.
+
 ## What it measures
 
 - **Camera distance** — from apparent iris size

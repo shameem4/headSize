@@ -1,0 +1,13 @@
+headSize
+Copyright 2025-2026 Shameem Hameed
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party components
+----------------------
+face_model_with_iris.obj and face-mesh-triangles.js (derived from it)
+  MediaPipe canonical face model. Copyright Google LLC. Apache License 2.0.
+  https://github.com/google-ai-edge/mediapipe
+
+Loaded at runtime from CDNs (not redistributed here): MediaPipe Tasks Vision
+(Apache-2.0), three.js (MIT).

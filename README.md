@@ -75,4 +75,4 @@ The earlier React/Vite version is preserved in the `archive/main-vite` tag.
 
 ## License
 
-[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) (non-commercial), see [LICENSE](LICENSE).
+[Apache License 2.0](LICENSE): commercial use is allowed, provided the licence and the [NOTICE](NOTICE) file (attribution) go with any copy.
